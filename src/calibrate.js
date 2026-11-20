@@ -92,8 +92,10 @@ export function calibrateCar({
   const area = matchFraction(frame, carHue, tolerance);
   if (area < MIN_NOTE_FRACTION) return { ok: false, reason: 'no-note' };
 
+  // Cars calibrated apart by less than twice the tolerance would match each other.
+  const separation = Math.max(MIN_HUE_SEPARATION, 2 * tolerance);
   const carIndex = existingCars.findIndex(
-    (car) => hueDistance(car.hue, carHue) < MIN_HUE_SEPARATION,
+    (car) => hueDistance(car.hue, carHue) < separation,
   );
   if (carIndex !== -1) {
     return { ok: false, reason: 'too-close-to-car', carIndex };

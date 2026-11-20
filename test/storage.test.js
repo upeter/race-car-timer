@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { serializeSetup, deserializeSetup } from '../src/storage.js';
+import {
+  serializeSetup,
+  deserializeSetup,
+  DEFAULT_SETTINGS,
+} from '../src/storage.js';
 
 const setup = {
   zone: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 },
@@ -29,4 +33,42 @@ test('invalid text gives null', () => {
   assert.equal(deserializeSetup('null'), null);
   assert.equal(deserializeSetup('42'), null);
   assert.equal(deserializeSetup('{"zone":null}'), null);
+});
+
+test('missing settings fall back to the defaults', () => {
+  const text = JSON.stringify({ zone: null, cars: [], settings: { tolerance: 20 } });
+  assert.deepEqual(deserializeSetup(text).settings, {
+    ...DEFAULT_SETTINGS,
+    tolerance: 20,
+  });
+});
+
+test('cars without a numeric hue or threshold are dropped', () => {
+  const text = JSON.stringify({
+    zone: null,
+    baseline: { data: [1, 2, 3, 255], width: 1, height: 1 },
+    cars: [
+      { name: 'a', hue: 10, threshold: 0.1, noiseFloor: 0 },
+      { name: 'b', hue: '10', threshold: 0.1 },
+      { name: 'c', hue: 10 },
+      null,
+    ],
+    settings: {},
+  });
+  assert.deepEqual(
+    deserializeSetup(text).cars.map((car) => car.name),
+    ['a'],
+  );
+});
+
+test('a baseline without a numeric size is dropped, and so are the cars', () => {
+  const text = JSON.stringify({
+    zone: null,
+    baseline: { data: [1, 2, 3, 255], width: 1 },
+    cars: [{ name: 'a', hue: 10, threshold: 0.1, noiseFloor: 0 }],
+    settings: {},
+  });
+  const result = deserializeSetup(text);
+  assert.equal(result.baseline, null);
+  assert.deepEqual(result.cars, []);
 });

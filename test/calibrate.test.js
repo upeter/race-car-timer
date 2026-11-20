@@ -6,6 +6,7 @@ import {
   hueAround,
   calibrateCar,
 } from '../src/calibrate.js';
+import { hueDistance } from '../src/color.js';
 import { FLOOR, PINK, ORANGE, GREY, mix, fill, near } from './helpers.js';
 
 const baseline = fill(1000, FLOOR);
@@ -114,4 +115,28 @@ test('calibrateCar rejects a given hue that is not in the frame', () => {
     hue: 135,
   });
   assert.deepEqual(result, { ok: false, reason: 'no-note' });
+});
+
+test('calibrateCar needs twice the tolerance as hue separation when that is larger', () => {
+  const existingCars = [{ hue: 294.2 }]; // 35° from the pink note
+  const wide = calibrateCar({
+    baseline,
+    frame: pinkCar,
+    tolerance: 20,
+    existingCars,
+  });
+  assert.deepEqual(wide, { ok: false, reason: 'too-close-to-car', carIndex: 0 });
+  const narrow = calibrateCar({
+    baseline,
+    frame: pinkCar,
+    tolerance: 15,
+    existingCars,
+  });
+  assert.equal(narrow.ok, true);
+});
+
+test('findNoteHue averages across the 0/360 degree boundary', () => {
+  const frame = mix([[800, FLOOR], [100, [255, 40, 60]], [100, [255, 60, 40]]]);
+  const note = findNoteHue(baseline, frame);
+  assert.ok(hueDistance(note.hue, 0) <= 2, `hue was ${note.hue}`);
 });

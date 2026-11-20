@@ -1,5 +1,14 @@
 const KEY = 'race-car-timer-setup';
 
+export const DEFAULT_SETTINGS = {
+  tolerance: 15,
+  minLapTime: 2,
+  mode: 'practice',
+  lapTarget: 10,
+};
+
+const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+
 export function serializeSetup(setup) {
   const { baseline } = setup;
   return JSON.stringify({
@@ -22,13 +31,20 @@ export function deserializeSetup(text) {
     ) {
       return null;
     }
+    const baseline =
+      raw.baseline && isNumber(raw.baseline.width) && isNumber(raw.baseline.height)
+        ? { ...raw.baseline, data: Uint8ClampedArray.from(raw.baseline.data) }
+        : null;
+    const cars = baseline
+      ? raw.cars.filter(
+          (car) => car && isNumber(car.hue) && isNumber(car.threshold),
+        )
+      : [];
     return {
       zone: raw.zone ?? null,
-      baseline: raw.baseline
-        ? { ...raw.baseline, data: Uint8ClampedArray.from(raw.baseline.data) }
-        : null,
-      cars: raw.cars,
-      settings: raw.settings,
+      baseline,
+      cars,
+      settings: { ...DEFAULT_SETTINGS, ...raw.settings },
     };
   } catch {
     return null;
