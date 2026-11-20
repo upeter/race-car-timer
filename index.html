@@ -21,6 +21,8 @@
     button:disabled { background: #555; color: #999; }
     button.quiet { background: #444; }
     input[type="number"] { font: inherit; width: 4.5em; padding: 6px; }
+    .status { margin: 0 0 4px; font-size: 13px; opacity: 0.8; }
+    .status:empty { display: none; }
     #hint { margin: 0 0 4px; font-weight: 600; }
     #cars { list-style: none; margin: 0; padding: 0; }
     #cars li { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
@@ -59,6 +61,7 @@
 
   <section id="setup" class="panel">
     <p id="hint"></p>
+    <p id="status" class="status"></p>
     <div class="row">
       <button id="set-zone">1. Set zone</button>
       <button id="capture-baseline">2. Capture empty track</button>
@@ -93,6 +96,7 @@
   </section>
 
   <section id="run" class="panel" hidden>
+    <p id="run-status" class="status"></p>
     <table>
       <thead>
         <tr><th>#</th><th>Car</th><th>Laps</th><th>Last</th><th>Best</th><th>Total</th></tr>

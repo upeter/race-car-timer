@@ -14,7 +14,12 @@ import {
   standings,
   isRaceOver,
 } from './race.js';
-import { loadSetup, saveSetup, clearSetup } from './storage.js';
+import {
+  DEFAULT_SETTINGS,
+  loadSetup,
+  saveSetup,
+  clearSetup,
+} from './storage.js';
 import {
   createBeeper,
   formatTime,
@@ -28,6 +33,12 @@ const CAR_FRAMES = 5;
 const COUNTDOWN_SECONDS = 3;
 const TAP_RADIUS = 2;
 const MIN_ZONE_SIZE = 0.03;
+const SETUP_STAGE_HEIGHT = '50dvh'; // the Setup panel covers the rest
+const RUN_STAGE_HEIGHT = '100dvh';
+const FPS_WINDOW_SECONDS = 1;
+const PICTURE_CHANGED =
+  'The camera picture changed. Capture the empty track and add the cars again.';
+const TOLERANCE_CHANGED = 'Colour tolerance changed. Add the cars again.';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video');
@@ -40,7 +51,7 @@ function defaultSetup() {
     zone: null,
     baseline: null,
     cars: [],
-    settings: { tolerance: 15, minLapTime: 2, mode: 'practice', lapTarget: 10 },
+    settings: { ...DEFAULT_SETTINGS },
   };
 }
 
@@ -52,6 +63,7 @@ let stopFrames = null;
 let lastTime = 0;
 let levels = [];
 let collector = null; // { frames, count, resolve }: frames wanted by a capture
+let capturing = false; // a capture is pending: the setup buttons are off
 let pointerMode = 'none'; // 'none' | 'zone' | 'tap'
 let dragStart = null;
 let draftZone = null;
@@ -59,6 +71,7 @@ let session = null; // null on the Setup screen
 let frozenTime = null; // time at which a race ended or was stopped
 let countdownShown = null;
 let wakeLock = null;
+let fpsStart = null; // { time, frames }: window for the frame rate
 
 function save() {
   saveSetup(setup);
@@ -82,23 +95,73 @@ async function startCamera() {
   try {
     await openCamera(video);
   } catch (error) {
-    showMessage(`Could not open the camera: ${error.message}`);
+    showMessage(
+      `Could not open the camera: ${error.message} ` +
+        "Allow the camera for this site in Chrome's site settings, then press Retry.",
+    );
     return;
   }
-  const ratio = video.videoWidth / video.videoHeight;
-  stage.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
-  stage.style.width = `min(100vw, calc(100dvh * ${ratio}))`;
-  overlay.width = video.videoWidth;
-  overlay.height = video.videoHeight;
+  layout();
+  keepAwake();
   readZone = createZoneReader(video);
   if (stopFrames) stopFrames();
-  stopFrames = onFrames(video, handleFrame);
+  stopFrames = onFrames(video, handleFrame, showFrameError);
+}
+
+// Sizes the stage to the video's aspect ratio. On the Setup screen it stays
+// above the panel, so the whole picture can be boxed and tapped.
+function layout() {
+  const { videoWidth, videoHeight } = video;
+  if (!videoWidth || !videoHeight) return;
+  const height = session === null ? SETUP_STAGE_HEIGHT : RUN_STAGE_HEIGHT;
+  stage.style.aspectRatio = `${videoWidth} / ${videoHeight}`;
+  stage.style.width = `min(100vw, calc(${height} * ${videoWidth / videoHeight}))`;
+  overlay.width = videoWidth;
+  overlay.height = videoHeight;
+}
+
+function onVideoResize() {
+  // Its frames may have different sizes.
+  if (cancelCapture()) setHint(nextHint());
+  layout();
+}
+
+video.addEventListener('resize', onVideoResize);
+
+function showFrameError(error) {
+  const text = `Error: ${error.message}`;
+  if (session === null) setHint(text);
+  else $('run-status').textContent = text;
+}
+
+async function keepAwake() {
+  if (wakeLock && !wakeLock.released) return;
+  try {
+    wakeLock = await navigator.wakeLock?.request('screen');
+  } catch {
+    // The screen can go dark. The timer still works while it is on.
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') keepAwake();
+});
+
+function updateStatus(time) {
+  fpsStart ??= { time, frames: 0 };
+  fpsStart.frames++;
+  const elapsed = time - fpsStart.time;
+  if (elapsed < FPS_WINDOW_SECONDS) return;
+  const fps = Math.round(fpsStart.frames / elapsed);
+  $('status').textContent = `${fps} fps · ${video.videoWidth}×${video.videoHeight}`;
+  fpsStart = { time, frames: 0 };
 }
 
 // ---- Frame loop -----------------------------------------------------------
 
 function handleFrame(time) {
   lastTime = time;
+  updateStatus(time);
   drawOverlay();
   if (!setup.zone) return;
 
@@ -110,10 +173,7 @@ function handleFrame(time) {
     (setup.baseline.width !== image.width ||
       setup.baseline.height !== image.height)
   ) {
-    setup.baseline = null;
-    setup.cars = [];
-    save();
-    renderSetup();
+    handlePictureChange();
   }
 
   if (collector) {
@@ -147,11 +207,37 @@ function handleFrame(time) {
   renderRun(frozenTime ?? time);
 }
 
-// Resolves with the average of the next `count` zone images.
-function collect(count) {
-  return new Promise((resolve) => {
-    collector = { frames: [], count, resolve };
-  });
+// The baseline and the cars no longer fit the picture. Leaves the run
+// screen first, so nothing renders a car that is gone.
+function handlePictureChange() {
+  setup.baseline = null;
+  setup.cars = [];
+  save();
+  cancelCapture();
+  if (session !== null) showSetupScreen();
+  renderSetup(PICTURE_CHANGED);
+}
+
+// Resolves with the average of the next `count` zone images, or with null
+// when the capture is cancelled. The setup buttons are off meanwhile.
+async function collect(count) {
+  setCapturing(true);
+  try {
+    return await new Promise((resolve) => {
+      collector = { frames: [], count, resolve };
+    });
+  } finally {
+    setCapturing(false);
+  }
+}
+
+// Returns true when a capture was pending.
+function cancelCapture() {
+  if (collector === null) return false;
+  const cancelled = collector;
+  collector = null;
+  cancelled.resolve(null);
+  return true;
 }
 
 function drawOverlay() {
@@ -191,13 +277,26 @@ function nextHint() {
   return 'Press Start.';
 }
 
-function renderSetup() {
-  const { zone, baseline, cars, settings } = setup;
-  const canAdd = baseline !== null && cars.length < MAX_CARS;
-  $('capture-baseline').disabled = zone === null;
+function setCapturing(value) {
+  capturing = value;
+  updateButtons();
+}
+
+function updateButtons() {
+  const { zone, baseline, cars } = setup;
+  const canAdd = baseline !== null && cars.length < MAX_CARS && !capturing;
+  $('set-zone').disabled = capturing;
+  $('clear-setup').disabled = capturing;
+  $('capture-baseline').disabled = zone === null || capturing;
   $('add-car').disabled = !canAdd;
   $('tap-note').disabled = !canAdd;
   $('start').disabled = zone === null || baseline === null || cars.length === 0;
+}
+
+// `hint` replaces the usual next-step hint, for messages that must stay.
+function renderSetup(hint = nextHint()) {
+  const { cars, settings } = setup;
+  updateButtons();
 
   document.querySelector(
     `input[name="mode"][value="${settings.mode}"]`,
@@ -210,7 +309,7 @@ function renderSetup() {
   $('min-lap-value').textContent = `${settings.minLapTime} s`;
 
   $('cars').replaceChildren(...cars.map(carItem));
-  setHint(nextHint());
+  setHint(hint);
 }
 
 function carItem(car, index) {
@@ -288,7 +387,9 @@ $('set-zone').addEventListener('click', () => {
 
 $('capture-baseline').addEventListener('click', async () => {
   setHint('Capturing…');
-  setup.baseline = await collect(BASELINE_FRAMES);
+  const image = await collect(BASELINE_FRAMES);
+  if (image === null) return;
+  setup.baseline = image;
   save();
   renderSetup();
 });
@@ -296,6 +397,11 @@ $('capture-baseline').addEventListener('click', async () => {
 $('add-car').addEventListener('click', async () => {
   setHint('Looking for the note…');
   const image = await collect(CAR_FRAMES);
+  if (image === null) return; // cancelled: the canceller set the hint
+  if (setup.baseline === null) {
+    setHint(nextHint());
+    return;
+  }
   applyCalibration(
     calibrateCar({
       baseline: setup.baseline.data,
@@ -319,7 +425,13 @@ async function handleTap(point) {
     setHint('Tap the note while the car is on the finish line, inside the box.');
     return;
   }
+  setHint('Looking for the note…');
   const image = await collect(CAR_FRAMES);
+  if (image === null) return; // cancelled: the canceller set the hint
+  if (setup.baseline === null) {
+    setHint(nextHint());
+    return;
+  }
   const hue = hueAround(
     image.data,
     image.width,
@@ -344,7 +456,7 @@ async function handleTap(point) {
 }
 
 overlay.addEventListener('pointerdown', (event) => {
-  if (session !== null) return;
+  if (session !== null || capturing) return;
   const point = normalizedPoint(event, overlay);
   if (pointerMode === 'tap') {
     pointerMode = 'none';
@@ -377,6 +489,7 @@ function finishDrag() {
     return;
   }
   // The baseline and the cars were measured in the old zone.
+  cancelCapture();
   setup.zone = zone;
   setup.baseline = null;
   setup.cars = [];
@@ -402,10 +515,19 @@ $('lap-target').addEventListener('change', () => {
   renderSetup();
 });
 
+// While dragging, only the label changes.
 $('tolerance').addEventListener('input', () => {
-  setup.settings.tolerance = Number($('tolerance').value);
-  $('tolerance-value').textContent = `±${setup.settings.tolerance}°`;
+  $('tolerance-value').textContent = `±${$('tolerance').value}°`;
+});
+
+// The cars were calibrated at the old tolerance, so they are removed.
+$('tolerance').addEventListener('change', () => {
+  const tolerance = Number($('tolerance').value);
+  if (tolerance === setup.settings.tolerance) return;
+  setup.settings.tolerance = tolerance;
+  setup.cars = [];
   save();
+  renderSetup(TOLERANCE_CHANGED);
 });
 
 $('min-lap').addEventListener('input', () => {
@@ -415,8 +537,12 @@ $('min-lap').addEventListener('input', () => {
 });
 
 $('clear-setup').addEventListener('click', () => {
+  cancelCapture();
   clearSetup();
   setup = defaultSetup();
+  pointerMode = 'none';
+  draftZone = null;
+  dragStart = null;
   renderSetup();
 });
 
@@ -433,19 +559,11 @@ function newSession() {
   frozenTime = null;
   countdownShown = null;
   $('countdown').hidden = true;
-}
-
-async function keepAwake() {
-  try {
-    wakeLock = await navigator.wakeLock?.request('screen');
-  } catch {
-    // The screen can go dark. The timer still works while it is on.
-  }
+  $('run-status').textContent = '';
 }
 
 $('start').addEventListener('click', () => {
   beeper.unlock();
-  keepAwake();
   newSession();
   const race = setup.settings.mode === 'race';
   $('setup').hidden = true;
@@ -454,9 +572,11 @@ $('start').addEventListener('click', () => {
   $('start-race').textContent = 'Start race';
   $('stop-race').hidden = true;
   $('reset').hidden = race;
+  layout();
 });
 
 $('start-race').addEventListener('click', () => {
+  beeper.unlock();
   newSession();
   startRace(session, lastTime + COUNTDOWN_SECONDS);
   $('start-race').hidden = true;
@@ -477,18 +597,17 @@ $('stop-race').addEventListener('click', () => {
 
 $('reset').addEventListener('click', newSession);
 
-$('back').addEventListener('click', () => {
+function showSetupScreen() {
   session = null;
   $('countdown').hidden = true;
   $('run').hidden = true;
   $('setup').hidden = false;
-  wakeLock?.release();
-  wakeLock = null;
-  renderSetup();
-});
+  layout();
+}
 
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && session !== null) keepAwake();
+$('back').addEventListener('click', () => {
+  showSetupScreen();
+  renderSetup();
 });
 
 // Shows 3, 2, 1 before "Go" and "Go" for one second after it.
@@ -537,7 +656,7 @@ function renderRun(now) {
     name.append(swatch, ` ${car.name}`);
 
     row.append(
-      cell(String(position + 1)),
+      cell(race ? String(position + 1) : ''),
       name,
       cell(race ? `${stats.laps}/${session.lapTarget}` : String(stats.laps)),
       cell(formatTime(stats.lastLap)),

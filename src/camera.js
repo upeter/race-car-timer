@@ -6,7 +6,14 @@ export function cameraSupported() {
   return Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 }
 
+// Stops every track of the stream shown in `video`, if any.
+export function closeCamera(video) {
+  video.srcObject?.getTracks().forEach((track) => track.stop());
+  video.srcObject = null;
+}
+
 export async function openCamera(video) {
+  closeCamera(video);
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: {
@@ -21,21 +28,47 @@ export async function openCamera(video) {
   return stream;
 }
 
+const CLOCK_CHECK_CALLBACKS = 5;
+
 // Calls callback(time) once per video frame, time in seconds. Uses the
-// frame's media time when the browser gives it. Returns a stop function.
-export function onFrames(video, callback) {
+// frame's media time when it advances, otherwise the callback's own clock
+// (decided once, in the first 5 callbacks, which are not passed on). An error in the callback goes to
+// onError and does not stop the loop. Returns a stop function.
+export function onFrames(video, callback, onError) {
   let stopped = false;
+  const run = (time) => {
+    try {
+      callback(time);
+    } catch (error) {
+      console.error(error);
+      onError?.(error);
+    }
+  };
   if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+    // The first callbacks only test the clock; they are not passed on, so
+    // the two clocks are never mixed.
+    let useMediaTime = true;
+    let seen = 0;
+    let firstMediaTime = null;
     const step = (now, metadata) => {
       if (stopped) return;
-      callback(metadata.mediaTime);
+      if (seen < CLOCK_CHECK_CALLBACKS) {
+        seen++;
+        firstMediaTime ??= metadata.mediaTime;
+        if (seen === CLOCK_CHECK_CALLBACKS) {
+          useMediaTime = metadata.mediaTime > firstMediaTime;
+        }
+      }
+      if (seen >= CLOCK_CHECK_CALLBACKS) {
+        run(useMediaTime ? metadata.mediaTime : now / 1000);
+      }
       video.requestVideoFrameCallback(step);
     };
     video.requestVideoFrameCallback(step);
   } else {
     const step = () => {
       if (stopped) return;
-      callback(performance.now() / 1000);
+      run(performance.now() / 1000);
       requestAnimationFrame(step);
     };
     requestAnimationFrame(step);

@@ -29,7 +29,7 @@ export function createBeeper() {
   return {
     unlock() {
       if (context === null) context = new AudioContext();
-      if (context.state === 'suspended') context.resume();
+      if (context.state === 'suspended') context.resume().catch(() => {});
     },
     beep(frequency = 880, duration = 0.12) {
       if (context === null) return;
