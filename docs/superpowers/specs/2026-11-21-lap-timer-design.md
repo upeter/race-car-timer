@@ -190,8 +190,8 @@ No framework and no build step. ES modules loaded directly by the page.
 | `src/color.js` | RGB to HSV, circular hue distance and mean, pixel match test | nothing |
 | `src/calibrate.js` | Baseline + car frame → car colour, threshold, check result | `color.js` |
 | `src/detector.js` | Pixel buffer + cars → match level and presence per car | `color.js` |
-| `src/laps.js` | Crossing state machine and lap list per car | nothing |
-| `src/race.js` | Practice and Race rules, standings | `laps.js` |
+| `src/laps.js` | Crossing state machine per car | nothing |
+| `src/race.js` | Practice and Race rules, lap lists, standings | `laps.js` |
 | `src/camera.js` | Opens the camera, delivers frames with timestamps | browser APIs |
 | `src/storage.js` | Saves and loads the setup in `localStorage` | browser APIs |
 | `src/ui.js` | Setup steps, overlay drawing, countdown, beeps | DOM |
