@@ -55,7 +55,7 @@ done in this order. Each step is enabled only when the step before it is done.
 5. **Start.** Goes to the Practice or Race screen.
 
 Settings, collapsed by default: colour tolerance (default ±15° hue), minimum
-lap time (default 2 s).
+lap time (default 2 s). Changing the colour tolerance removes the cars.
 
 If the zone is changed, the baseline and all cars are cleared, because they
 were measured in the old zone.
@@ -127,8 +127,9 @@ The car is not added, and the page says why, when:
 
 - Fewer than 2 % of zone pixels are note pixels: "No coloured note found. Put
   the car on the finish line."
-- The hue is less than 30° from the hue of a car already added: "Too close to
-  Car N. Use a different colour."
+- The hue is less than 30°, or twice the colour tolerance if that is larger,
+  from the hue of a car already added: "Too close to Car N. Use a
+  different colour."
 - The noise floor is more than half of the calibrated area: "This colour is
   too close to the floor or the strip. Use a different colour."
 
