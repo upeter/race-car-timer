@@ -24,6 +24,20 @@ camera.
 - Good, even light.
 - Turn off auto-rotate before you mount the phone.
 
+### Mounting the phone
+
+Lay the phone flat on top of a box at the side of the track, screen up, with
+the camera end sticking out over the track. A sheet of white paper under the
+camera makes a clean finish strip; the line drawn on it marks the finish. The box
+must be tall enough that the camera sees the whole strip.
+
+<p align="center">
+  <img src="docs/images/setup-side.jpg" width="49%"
+       alt="Side view: a phone lies on top of a tall black box at the edge of the track. Its camera end sticks out over a sheet of white paper on the floor, with a red finish line drawn across it.">
+  <img src="docs/images/setup-top.jpg" width="49%"
+       alt="Top view: the phone lies across the top of the box, screen up, showing the race screen. The white paper strip runs under the camera end.">
+</p>
+
 ## Setup
 
 Setup is a wizard: one step per screen, with **Next** and **Back**.
