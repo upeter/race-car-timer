@@ -39,8 +39,12 @@ The page has three screens: Setup, Practice and Race. Setup comes first.
 
 ### Setup
 
-Live rear-camera video, full screen, with a panel of controls. The steps are
-done in this order. Each step is enabled only when the step before it is done.
+A wizard: one step per screen, under a header with the step number and
+title, and over the live rear-camera video. Each screen has one main button,
+plus Back. A step is reachable only when the steps before it are done; if a
+step is undone (for example the cars are removed), the wizard goes back to it.
+A stored setup opens on the last screen, "Grid is set", which lists the cars
+and has the Start button ("Lights out"), Edit setup, Settings and Clear.
 
 1. **Zone.** The user drags a rectangle over the finish strip. It must be
    roughly one car length wide in the direction of travel, because a fast car
@@ -65,9 +69,13 @@ reload does not lose the setup. A "Clear setup" button deletes them.
 
 ### Practice
 
-- Live video with the zone outlined.
-- Overlay table, one row per car: swatch and name, lap count, last lap, best
-  lap, total time.
+- Live video with the zone outlined. The results sit in a panel at the
+  bottom, over the part of the picture that shows only what the phone stands
+  on.
+- One card per car, two per row: a stripe in the sticker colour the camera
+  measured, the name, the last lap in large type, then best lap, lap count
+  and total time. The fastest lap of the session is purple. Above the cards:
+  "Practice" and the session clock (since the first car started).
 - A car's clock starts on its first crossing. That crossing does not count a
   lap.
 - A beep on each counted lap.
@@ -86,12 +94,17 @@ Assumption: the rules below are a proposal. The user has not confirmed them.
   the line, the first crossing completes lap 1.
 - A car finishes when its lap count reaches the lap target. Its finish time is
   the race time of that crossing. Later crossings of that car are ignored.
-- The overlay table is sorted by position: finished cars by finish time, then
+- The cards are sorted by position: finished cars by finish time, then
   running cars by lap count (more is better), then by time of the last
-  crossing (earlier is better). Columns: position, swatch and name, laps as
-  "3/10", last lap, best lap, total time.
+  crossing (earlier is better). Each card shows its position, and laps as
+  "3/10". Above the cards: "Grid · 10 laps" before "Go", then "Lap 4/10"
+  (the leader's current lap), and the race clock.
 - The race ends when all cars have finished or the user presses "Stop". The
-  final table stays on screen. Buttons: "New race" (same setup) and Setup.
+  cards give way to the result: a chequered "Finish" (or "Stopped") box with
+  the leader's laps, the race time, and a podium for the first three. The
+  winner shows their best lap, the others their gap to the winner: "+0.78" on
+  the same lap, "+2 laps" when lapped. A fourth car is listed below the
+  podium. Buttons: "New race" (same setup) and Setup.
 
 ## Calibration
 

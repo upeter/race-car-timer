@@ -49,3 +49,23 @@ export function matchFraction(data, hue, tolerance) {
   }
   return count / pixels;
 }
+
+// Mean colour, as "#rrggbb", of the pixels that `matchFraction` counts.
+// Null when no pixel matches.
+export function meanMatchColor(data, hue, tolerance) {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let count = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const { h, s, v } = rgbToHsv(data[i], data[i + 1], data[i + 2]);
+    if (!isSaturated(s, v) || hueDistance(h, hue) > tolerance) continue;
+    r += data[i];
+    g += data[i + 1];
+    b += data[i + 2];
+    count++;
+  }
+  if (count === 0) return null;
+  const hex = (sum) => Math.round(sum / count).toString(16).padStart(2, '0');
+  return `#${hex(r)}${hex(g)}${hex(b)}`;
+}

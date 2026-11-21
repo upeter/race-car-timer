@@ -12,6 +12,20 @@ export function hueToCss(hue) {
   return `hsl(${Math.round(hue)} 90% 55%)`;
 }
 
+// The sticker colour the camera saw. Cars stored before it was measured
+// only have a hue.
+export function carColor(car) {
+  return car.color ?? hueToCss(car.hue);
+}
+
+// "+0.78" behind on the same lap, "+2 laps" when lapped, "" for the leader.
+export function formatGap(gap) {
+  if (gap === null) return '';
+  if ('laps' in gap) return gap.laps === 1 ? '+1 lap' : `+${gap.laps} laps`;
+  if (gap.seconds < 60) return `+${gap.seconds.toFixed(2)}`;
+  return `+${formatTime(gap.seconds)}`;
+}
+
 // Pointer position as fractions (0–1) of the element's box.
 export function normalizedPoint(event, element) {
   const rect = element.getBoundingClientRect();

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { near } from './helpers.js';
 import {
   createSession,
   startRace,
@@ -7,6 +8,8 @@ import {
   carStats,
   standings,
   isRaceOver,
+  gaps,
+  fastestLap,
 } from '../src/race.js';
 
 // One car crosses the line at `time`: one present frame, then three absent
@@ -124,4 +127,33 @@ test('race: the race is over when all cars have finished', () => {
   assert.equal(isRaceOver(session), false);
   cross(session, 1, 13);
   assert.equal(isRaceOver(session), true);
+});
+
+test('gaps are seconds on the same lap and laps when lapped', () => {
+  const session = race(3, 10);
+  cross(session, 0, 15);
+  cross(session, 1, 16);
+  cross(session, 2, 17);
+  cross(session, 0, 20);
+  cross(session, 1, 21.5);
+  const result = gaps(session);
+  assert.equal(result[0], null);
+  near(result[1].seconds, 1.5);
+  assert.deepEqual(result[2], { laps: 1 });
+});
+
+test('gaps leave a car without a lap time empty', () => {
+  const session = race(2, 10);
+  assert.deepEqual(gaps(session), [null, null]);
+});
+
+test('fastestLap finds the quickest lap of any car', () => {
+  const session = race(2, 10);
+  assert.equal(fastestLap(session), null);
+  cross(session, 0, 15);
+  cross(session, 1, 14);
+  cross(session, 0, 19.5);
+  const best = fastestLap(session);
+  assert.equal(best.car, 1);
+  near(best.time, 4);
 });

@@ -48,6 +48,7 @@ test('calibrateCar accepts a clear note colour', () => {
   near(result.car.hue, 329.2);
   assert.equal(result.car.noiseFloor, 0);
   near(result.car.threshold, 0.03, 1e-9);
+  assert.equal(result.car.color, '#ff3ca0');
 });
 
 test('calibrateCar rejects a frame without a note', () => {

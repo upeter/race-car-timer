@@ -13,6 +13,8 @@ import {
   carStats,
   standings,
   isRaceOver,
+  gaps,
+  fastestLap,
 } from './race.js';
 import {
   DEFAULT_SETTINGS,
@@ -22,10 +24,12 @@ import {
 } from './storage.js';
 import {
   createBeeper,
+  carColor,
+  formatGap,
   formatTime,
-  hueToCss,
   normalizedPoint,
 } from './ui.js';
+import { clampStep, furthestStep } from './wizard.js';
 
 const MAX_CARS = 4;
 const BASELINE_FRAMES = 10;
@@ -33,7 +37,14 @@ const CAR_FRAMES = 5;
 const COUNTDOWN_SECONDS = 3;
 const TAP_RADIUS = 2;
 const MIN_ZONE_SIZE = 0.03;
-const SETUP_STAGE_HEIGHT = '50dvh'; // the Setup panel covers the rest
+// The camera's height on each setup step; the step panel takes the rest.
+const SETUP_STAGE_HEIGHTS = {
+  zone: '50dvh',
+  baseline: '50dvh',
+  cars: '34dvh',
+  mode: '24dvh',
+  ready: '24dvh',
+};
 const RUN_STAGE_HEIGHT = '100dvh';
 const FPS_WINDOW_SECONDS = 1;
 const PICTURE_CHANGED =
@@ -58,13 +69,15 @@ function defaultSetup() {
 // ---- State ----------------------------------------------------------------
 
 let setup = loadSetup() ?? defaultSetup();
+let step = furthestStep(setup);
 let readZone = null;
 let stopFrames = null;
 let lastTime = 0;
 let levels = [];
 let collector = null; // { frames, count, resolve }: frames wanted by a capture
 let capturing = false; // a capture is pending: the setup buttons are off
-let pointerMode = 'none'; // 'none' | 'zone' | 'tap'
+let offerTap = false; // the camera missed a sticker: offer to tap it
+let pointerMode = step === 'zone' ? 'zone' : 'none'; // 'none' | 'zone' | 'tap'
 let dragStart = null;
 let draftZone = null;
 let session = null; // null on the Setup screen
@@ -113,7 +126,7 @@ async function startCamera() {
 function layout() {
   const { videoWidth, videoHeight } = video;
   if (!videoWidth || !videoHeight) return;
-  const height = session === null ? SETUP_STAGE_HEIGHT : RUN_STAGE_HEIGHT;
+  const height = session === null ? SETUP_STAGE_HEIGHTS[step] : RUN_STAGE_HEIGHT;
   stage.style.aspectRatio = `${videoWidth} / ${videoHeight}`;
   stage.style.width = `min(100vw, calc(${height} * ${videoWidth / videoHeight}))`;
   overlay.width = videoWidth;
@@ -122,7 +135,7 @@ function layout() {
 
 function onVideoResize() {
   // Its frames may have different sizes.
-  if (cancelCapture()) setHint(nextHint());
+  if (cancelCapture()) setHint(stepHint());
   layout();
 }
 
@@ -261,20 +274,54 @@ function setHint(text) {
   $('hint').textContent = text;
 }
 
-function nextHint() {
-  if (!setup.zone) {
-    return 'Press "Set zone" and drag a box over the finish strip.';
+function stepHint() {
+  const { zone, cars } = setup;
+  if (step === 'zone') {
+    return zone
+      ? 'Drag a new box to move it. A new box removes the cars.'
+      : 'Drag a box over the finish line, about one car length wide.';
   }
-  if (!setup.baseline) {
-    return 'Take all cars out of the zone, then press "Capture empty track".';
+  if (step === 'baseline') {
+    return setup.baseline
+      ? 'Capture the empty track again if the light changed, or keep it.'
+      : 'Take all cars and hands out of the box, then capture the empty track.';
   }
-  if (setup.cars.length === 0) {
-    return 'Put one car on the finish line and press "Add car".';
+  if (step === 'cars') {
+    if (cars.length === 0) {
+      return 'Put one car on the finish line, with its colour sticker inside the box.';
+    }
+    if (cars.length < MAX_CARS) {
+      return 'Put the next car on the line, or press "Done with cars".';
+    }
+    return 'Four cars is the maximum. Press "Done with cars".';
   }
-  if (setup.cars.length < MAX_CARS) {
-    return 'Add the next car, or press Start.';
+  return '';
+}
+
+function stepHeader() {
+  const { cars, settings } = setup;
+  if (step === 'zone') return ['Step 1/4', 'Finish line', 'Mark the finish line'];
+  if (step === 'baseline') return ['Step 2/4', 'Empty track', 'Clear the track'];
+  if (step === 'cars') {
+    if (cars.length >= MAX_CARS) return ['Step 3/4', '4 of 4 cars', 'Grid is full'];
+    const next = cars.length + 1;
+    return ['Step 3/4', `Car ${next} of ${MAX_CARS}`, `Car ${next} to the line`];
   }
-  return 'Press Start.';
+  if (step === 'mode') return ['Step 4/4', 'Session', 'Choose the session'];
+  return ['Ready', sessionLabel(settings), 'Grid is set'];
+}
+
+function sessionLabel({ mode, lapTarget }) {
+  return mode === 'race' ? `Race · ${lapTarget} laps` : 'Practice';
+}
+
+function goTo(newStep) {
+  step = newStep;
+  offerTap = false;
+  pointerMode = step === 'zone' ? 'zone' : 'none';
+  dragStart = null;
+  draftZone = null;
+  renderSetup();
 }
 
 function setCapturing(value) {
@@ -284,73 +331,125 @@ function setCapturing(value) {
 
 function updateButtons() {
   const { zone, baseline, cars } = setup;
-  const canAdd = baseline !== null && cars.length < MAX_CARS && !capturing;
-  $('set-zone').disabled = capturing;
-  $('clear-setup').disabled = capturing;
-  $('capture-baseline').disabled = zone === null || capturing;
+  const ready = zone !== null && baseline !== null && cars.length > 0;
+  for (const button of $('setup').querySelectorAll('button')) {
+    button.disabled = capturing;
+  }
+  $('lap-target').disabled = capturing;
+  if (capturing) return;
+  const canAdd = baseline !== null && cars.length < MAX_CARS;
+  $('zone-next').disabled = zone === null;
+  $('capture-baseline').disabled = zone === null;
   $('add-car').disabled = !canAdd;
   $('tap-note').disabled = !canAdd;
-  $('start').disabled = zone === null || baseline === null || cars.length === 0;
+  $('cars-done').disabled = cars.length === 0;
+  $('start').disabled = !ready;
+  const race = setup.settings.mode === 'race';
+  for (const id of ['lap-target', 'laps-down', 'laps-up']) $(id).disabled = !race;
 }
 
-// `hint` replaces the usual next-step hint, for messages that must stay.
-function renderSetup(hint = nextHint()) {
+// `hint` replaces the usual step hint, for messages that must stay.
+function renderSetup(hint) {
+  const clamped = clampStep(step, setup);
+  if (clamped !== step) {
+    step = clamped;
+    pointerMode = step === 'zone' ? 'zone' : 'none';
+  }
   const { cars, settings } = setup;
-  updateButtons();
 
-  document.querySelector(
-    `input[name="mode"][value="${settings.mode}"]`,
-  ).checked = true;
+  const [tag, sub, title] = stepHeader();
+  $('step-tag').textContent = tag;
+  $('step-sub').textContent = sub;
+  $('step-title').textContent = title;
+  // An <svg> has no `hidden` property, only the attribute.
+  $('hero').toggleAttribute('hidden', step !== 'ready');
+  for (const element of document.querySelectorAll('.step')) {
+    element.hidden = element.dataset.step !== step;
+  }
+
+  updateButtons();
+  $('add-car').textContent = `Add car ${Math.min(cars.length + 1, MAX_CARS)}`;
+  $('baseline-next').hidden = setup.baseline === null;
+  $('tap-note').hidden = !offerTap;
+
+  for (const mode of ['practice', 'race']) {
+    const on = settings.mode === mode;
+    $(`mode-${mode}`).classList.toggle('on', on);
+    $(`mode-${mode}`).querySelector('button').setAttribute('aria-pressed', String(on));
+  }
   $('lap-target').value = settings.lapTarget;
-  $('lap-target').disabled = settings.mode !== 'race';
+
   $('tolerance').value = settings.tolerance;
   $('tolerance-value').textContent = `±${settings.tolerance}°`;
   $('min-lap').value = settings.minLapTime;
   $('min-lap-value').textContent = `${settings.minLapTime} s`;
 
-  $('cars').replaceChildren(...cars.map(carItem));
-  setHint(hint);
+  $('cars').replaceChildren(...cars.map((car, index) => carItem(car, index, true)));
+  $('grid').replaceChildren(...cars.map((car, index) => carItem(car, index, false)));
+  $('summary').textContent =
+    `${sessionLabel(settings)} · finish line set · empty track captured`;
+  setHint(hint ?? stepHint());
+  layout();
 }
 
-function carItem(car, index) {
+// A timing-tower row. On the cars step the name can be changed and the car
+// removed.
+function carItem(car, index, editable) {
   const item = document.createElement('li');
 
-  const swatch = document.createElement('span');
-  swatch.className = 'swatch';
-  swatch.style.background = hueToCss(car.hue);
+  const position = document.createElement('span');
+  position.className = 'pos';
+  position.textContent = String(index + 1);
 
-  const name = document.createElement('input');
-  name.type = 'text';
-  name.maxLength = 12;
-  name.value = car.name;
-  name.addEventListener('change', () => {
-    car.name = name.value.trim() || `Car ${index + 1}`;
+  const note = document.createElement('span');
+  note.className = 'note';
+  note.style.background = carColor(car);
+
+  let name;
+  if (editable) {
+    name = document.createElement('input');
+    name.type = 'text';
+    name.maxLength = 12;
     name.value = car.name;
-    save();
-  });
+    name.setAttribute('aria-label', `Name of car ${index + 1}`);
+    name.addEventListener('change', () => {
+      car.name = name.value.trim() || `Car ${index + 1}`;
+      name.value = car.name;
+      save();
+    });
+  } else {
+    name = document.createElement('span');
+    name.textContent = car.name;
+  }
+  name.classList.add('name');
 
   const bar = document.createElement('div');
   bar.className = 'bar';
   const fill = document.createElement('div');
   fill.className = 'fill';
+  fill.dataset.car = String(index);
   bar.append(fill);
 
-  const remove = document.createElement('button');
-  remove.className = 'quiet';
-  remove.textContent = 'Remove';
-  remove.addEventListener('click', () => {
-    setup.cars.splice(index, 1);
-    save();
-    renderSetup();
-  });
-
-  item.append(swatch, name, bar, remove);
+  item.append(position, note, name, bar);
+  if (editable) {
+    const remove = document.createElement('button');
+    remove.className = 'remove';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Remove ${car.name}`);
+    remove.addEventListener('click', () => {
+      setup.cars.splice(index, 1);
+      save();
+      renderSetup();
+    });
+    item.append(remove);
+  }
   return item;
 }
 
 // The white mark in the middle of a bar is the car's threshold.
 function updateMeters() {
-  document.querySelectorAll('#cars .fill').forEach((fill, index) => {
+  document.querySelectorAll('.tower .fill').forEach((fill) => {
+    const index = Number(fill.dataset.car);
     const car = setup.cars[index];
     if (!car) return;
     const level = levels[index] ?? 0;
@@ -361,7 +460,7 @@ function updateMeters() {
 
 function calibrationMessage(result) {
   if (result.reason === 'no-note') {
-    return 'No coloured note found. Put the car on the finish line.';
+    return 'No colour sticker found. Put the car on the line with its sticker inside the box.';
   }
   if (result.reason === 'too-close-to-car') {
     const other = setup.cars[result.carIndex].name;
@@ -372,18 +471,25 @@ function calibrationMessage(result) {
 
 function applyCalibration(result) {
   if (!result.ok) {
+    offerTap = true;
+    $('tap-note').hidden = false;
     setHint(calibrationMessage(result));
     return;
   }
+  offerTap = false;
   setup.cars.push({ name: `Car ${setup.cars.length + 1}`, ...result.car });
   save();
   renderSetup();
 }
 
-$('set-zone').addEventListener('click', () => {
-  pointerMode = 'zone';
-  setHint('Drag a box over the finish strip, about one car length wide.');
-});
+$('zone-next').addEventListener('click', () => goTo('baseline'));
+$('baseline-back').addEventListener('click', () => goTo('zone'));
+$('baseline-next').addEventListener('click', () => goTo('cars'));
+$('cars-back').addEventListener('click', () => goTo('baseline'));
+$('cars-done').addEventListener('click', () => goTo('mode'));
+$('mode-back').addEventListener('click', () => goTo('cars'));
+$('mode-next').addEventListener('click', () => goTo('ready'));
+$('edit-setup').addEventListener('click', () => goTo('zone'));
 
 $('capture-baseline').addEventListener('click', async () => {
   setHint('Capturing…');
@@ -391,15 +497,15 @@ $('capture-baseline').addEventListener('click', async () => {
   if (image === null) return;
   setup.baseline = image;
   save();
-  renderSetup();
+  goTo('cars');
 });
 
 $('add-car').addEventListener('click', async () => {
-  setHint('Looking for the note…');
+  setHint('Looking for the colour sticker…');
   const image = await collect(CAR_FRAMES);
   if (image === null) return; // cancelled: the canceller set the hint
   if (setup.baseline === null) {
-    setHint(nextHint());
+    renderSetup();
     return;
   }
   applyCalibration(
@@ -414,7 +520,7 @@ $('add-car').addEventListener('click', async () => {
 
 $('tap-note').addEventListener('click', () => {
   pointerMode = 'tap';
-  setHint('Put the car on the finish line, then tap its note in the picture.');
+  setHint('Keep the car on the line and tap its colour sticker in the picture.');
 });
 
 async function handleTap(point) {
@@ -422,14 +528,14 @@ async function handleTap(point) {
   const zx = (point.x - zone.x) / zone.w;
   const zy = (point.y - zone.y) / zone.h;
   if (zx < 0 || zx >= 1 || zy < 0 || zy >= 1) {
-    setHint('Tap the note while the car is on the finish line, inside the box.');
+    setHint('Tap the sticker inside the box, with the car on the finish line.');
     return;
   }
-  setHint('Looking for the note…');
+  setHint('Reading the sticker colour…');
   const image = await collect(CAR_FRAMES);
   if (image === null) return; // cancelled: the canceller set the hint
   if (setup.baseline === null) {
-    setHint(nextHint());
+    renderSetup();
     return;
   }
   const hue = hueAround(
@@ -441,7 +547,7 @@ async function handleTap(point) {
     TAP_RADIUS,
   );
   if (hue === null) {
-    setHint('No colour found at that point. Tap the middle of the note.');
+    setHint('No colour found at that point. Tap the middle of the sticker.');
     return;
   }
   applyCalibration(
@@ -478,14 +584,14 @@ overlay.addEventListener('pointermove', (event) => {
   };
 });
 
+// The zone step stays in zone mode, so the box can be drawn again.
 function finishDrag() {
   if (dragStart === null) return;
   const zone = draftZone;
   dragStart = null;
   draftZone = null;
-  pointerMode = 'none';
   if (zone === null || zone.w < MIN_ZONE_SIZE || zone.h < MIN_ZONE_SIZE) {
-    setHint('The box is too small. Press "Set zone" and try again.');
+    setHint('The box is too small. Drag a bigger box.');
     return;
   }
   // The baseline and the cars were measured in the old zone.
@@ -500,19 +606,34 @@ function finishDrag() {
 overlay.addEventListener('pointerup', finishDrag);
 overlay.addEventListener('pointercancel', finishDrag);
 
-for (const radio of document.querySelectorAll('input[name="mode"]')) {
-  radio.addEventListener('change', () => {
-    setup.settings.mode = radio.value;
+for (const button of document.querySelectorAll('[data-mode]')) {
+  button.addEventListener('click', () => {
+    setup.settings.mode = button.dataset.mode;
     save();
     renderSetup();
   });
 }
 
-$('lap-target').addEventListener('change', () => {
-  const value = Math.round(Number($('lap-target').value));
-  setup.settings.lapTarget = Math.min(999, Math.max(1, value || 10));
+function setLapTarget(value) {
+  setup.settings.lapTarget = Math.min(999, Math.max(1, Math.round(value) || 10));
   save();
   renderSetup();
+}
+
+$('lap-target').addEventListener('change', () => {
+  setLapTarget(Number($('lap-target').value));
+});
+$('laps-down').addEventListener('click', () => {
+  setLapTarget(setup.settings.lapTarget - 1);
+});
+$('laps-up').addEventListener('click', () => {
+  setLapTarget(setup.settings.lapTarget + 1);
+});
+
+$('settings-toggle').addEventListener('click', () => {
+  const open = $('settings').hidden;
+  $('settings').hidden = !open;
+  $('settings-toggle').setAttribute('aria-expanded', String(open));
 });
 
 // While dragging, only the label changes.
@@ -540,10 +661,7 @@ $('clear-setup').addEventListener('click', () => {
   cancelCapture();
   clearSetup();
   setup = defaultSetup();
-  pointerMode = 'none';
-  draftZone = null;
-  dragStart = null;
-  renderSetup();
+  goTo('zone');
 });
 
 // ---- Practice and Race ----------------------------------------------------
@@ -566,8 +684,11 @@ $('start').addEventListener('click', () => {
   beeper.unlock();
   newSession();
   const race = setup.settings.mode === 'race';
+  document.body.classList.add('running');
+  $('setup-head').hidden = true;
   $('setup').hidden = true;
   $('run').hidden = false;
+  document.querySelector('.run-chk').hidden = false;
   $('start-race').hidden = !race;
   $('start-race').textContent = 'Start race';
   $('stop-race').hidden = true;
@@ -601,13 +722,16 @@ function showSetupScreen() {
   session = null;
   $('countdown').hidden = true;
   $('run').hidden = true;
+  document.querySelector('.run-chk').hidden = true;
+  document.body.classList.remove('running');
+  $('setup-head').hidden = false;
   $('setup').hidden = false;
   layout();
 }
 
 $('back').addEventListener('click', () => {
   showSetupScreen();
-  renderSetup();
+  goTo('ready');
 });
 
 // Shows 3, 2, 1 before "Go" and "Go" for one second after it.
@@ -636,36 +760,161 @@ function updateCountdown(time) {
   }
 }
 
-function cell(text) {
-  const element = document.createElement('td');
-  element.textContent = text;
-  return element;
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
 }
 
-function renderRun(now) {
+function stat(label, value, className = '') {
+  const node = element('div', 'stat');
+  node.append(element('span', 'label', label), element('b', className, value));
+  return node;
+}
+
+function dot(car) {
+  const node = element('span', 'dot');
+  node.style.background = carColor(car);
+  return node;
+}
+
+// The time the session clock shows: race time after "Go", in practice the
+// time since the first car started.
+function sessionClock(now) {
+  if (session.mode === 'race') {
+    return session.goTime !== null && now >= session.goTime
+      ? now - session.goTime
+      : 0;
+  }
+  const starts = session.cars
+    .map((car) => car.startTime)
+    .filter((start) => start !== null);
+  return starts.length > 0 ? now - Math.min(...starts) : 0;
+}
+
+function leaderLaps() {
+  return Math.max(...session.cars.map((car) => car.laps.length));
+}
+
+function runTag(now) {
+  if (session.mode !== 'race') return 'Practice';
+  const { goTime, lapTarget } = session;
+  if (goTime === null || now < goTime) return `Grid · ${lapTarget} laps`;
+  return `Lap ${Math.min(leaderLaps() + 1, lapTarget)}/${lapTarget}`;
+}
+
+function carCard(carIndex, position, now, fastest) {
+  const car = setup.cars[carIndex];
+  const stats = carStats(session, carIndex, now);
   const race = session.mode === 'race';
-  const rows = standings(session).map((carIndex, position) => {
+  const card = element('div', 'card');
+
+  const stripe = element('div', 'card-stripe');
+  stripe.style.background = carColor(car);
+
+  const head = element('div', 'card-head');
+  if (race) head.append(element('span', 'card-pos', String(position + 1)));
+  head.append(element('span', 'card-name', car.name));
+
+  const isFastest = fastest !== null && fastest.car === carIndex;
+  const statRow = element('div', 'card-stats');
+  statRow.append(
+    stat('Best', formatTime(stats.bestLap), isFastest ? 'fastest' : ''),
+    stat('Laps', race ? `${stats.laps}/${session.lapTarget}` : String(stats.laps)),
+    stat('Total', formatTime(stats.total)),
+  );
+
+  card.append(
+    stripe,
+    head,
+    element('div', 'card-last', formatTime(stats.lastLap)),
+    statRow,
+  );
+  return card;
+}
+
+function renderLive(now) {
+  const fastest = fastestLap(session);
+  $('run-tag').textContent = runTag(now);
+  $('run-clock').textContent = formatTime(sessionClock(now));
+  const cards = standings(session).map((carIndex, position) =>
+    carCard(carIndex, position, now, fastest),
+  );
+  $('cards').classList.toggle('single', cards.length === 1);
+  $('cards').replaceChildren(...cards);
+}
+
+// The podium shows second, first, third from left to right.
+const PODIUM_ORDER = [1, 0, 2];
+
+function podiumStep(carIndex, position, gap, fastest) {
+  const car = setup.cars[carIndex];
+  const step = element('div', 'podium-step');
+  const name = element('div', 'podium-name');
+  name.append(dot(car), element('span', '', car.name));
+
+  let note;
+  if (position === 0) {
+    const best = carStats(session, carIndex, frozenTime).bestLap;
+    const isFastest = fastest !== null && fastest.car === carIndex;
+    note = element('span', `label${isFastest ? ' fastest' : ''}`, `Best ${formatTime(best)}`);
+  } else {
+    note = element('span', 'label', formatGap(gap) || '–');
+  }
+
+  step.append(
+    name,
+    note,
+    element('div', `podium-block p${position + 1}`, String(position + 1)),
+  );
+  return step;
+}
+
+function renderResult() {
+  const order = standings(session);
+  const carGaps = gaps(session);
+  const fastest = fastestLap(session);
+  const finished = isRaceOver(session);
+
+  $('finish-label').textContent = finished ? 'Finish' : 'Stopped';
+  $('finish-laps').textContent = `${leaderLaps()}/${session.lapTarget}`;
+  $('result-time').textContent = formatTime(sessionClock(frozenTime));
+
+  const steps = PODIUM_ORDER.filter((position) => position < order.length).map(
+    (position) => podiumStep(order[position], position, carGaps[position], fastest),
+  );
+  $('podium').style.gridTemplateColumns = `repeat(${steps.length}, minmax(0, 1fr))`;
+  $('podium').replaceChildren(...steps);
+
+  const others = order.slice(3).map((carIndex, offset) => {
     const car = setup.cars[carIndex];
-    const stats = carStats(session, carIndex, now);
-    const row = document.createElement('tr');
-
-    const name = document.createElement('td');
-    const swatch = document.createElement('span');
-    swatch.className = 'swatch';
-    swatch.style.background = hueToCss(car.hue);
-    name.append(swatch, ` ${car.name}`);
-
-    row.append(
-      cell(race ? String(position + 1) : ''),
-      name,
-      cell(race ? `${stats.laps}/${session.lapTarget}` : String(stats.laps)),
-      cell(formatTime(stats.lastLap)),
-      cell(formatTime(stats.bestLap)),
-      cell(formatTime(stats.total)),
+    const item = element('li');
+    item.append(
+      element('span', '', String(offset + 4)),
+      dot(car),
+      element('span', '', car.name),
+      element('b', '', formatGap(carGaps[offset + 3]) || '–'),
     );
-    return row;
+    return item;
   });
-  $('standings').replaceChildren(...rows);
+  $('others').hidden = others.length === 0;
+  $('others').replaceChildren(...others);
+}
+
+// A race that ended or was stopped shows the podium; otherwise the cards.
+function renderRun(now) {
+  const result = session.mode === 'race' && frozenTime !== null;
+  $('live-view').hidden = result;
+  $('cards').hidden = result;
+  $('result').hidden = !result;
+  $('podium').hidden = !result;
+  if (result) {
+    renderResult();
+  } else {
+    $('others').hidden = true;
+    renderLive(now);
+  }
 }
 
 // ---- Start ----------------------------------------------------------------

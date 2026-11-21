@@ -4,6 +4,7 @@ import {
   circularMeanHue,
   isSaturated,
   matchFraction,
+  meanMatchColor,
 } from './color.js';
 
 export const CHANGE_DISTANCE = 40;
@@ -107,5 +108,6 @@ export function calibrateCar({
   }
 
   const threshold = Math.max(AREA_FACTOR * area, noiseFloor + NOISE_MARGIN);
-  return { ok: true, car: { hue: carHue, threshold, noiseFloor } };
+  const color = meanMatchColor(frame, carHue, tolerance);
+  return { ok: true, car: { hue: carHue, color, threshold, noiseFloor } };
 }
