@@ -3,6 +3,11 @@
 A lap timer for small remote-controlled cars. A phone above the track watches
 the finish line through its camera and counts the laps of each car.
 
+<p align="center">
+  <img src="docs/images/demo.webp" width="300"
+       alt="Setup: mark the finish line, capture the empty track, add two cars, choose a 5-lap race. Then the 3-2-1-Go countdown, a lap being timed, and the podium at the finish.">
+</p>
+
 Open on the phone (Chrome, Android): https://upeter.github.io/race-car-timer/
 A phone needs the HTTPS address. Plain `http://` on the local network gives no
 camera.
