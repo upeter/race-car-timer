@@ -919,6 +919,35 @@ function renderRun(now) {
 
 // ---- Start ----------------------------------------------------------------
 
+// ---- Install as an app ----------------------------------------------------
+
+let installPrompt = null; // Chrome's deferred install prompt
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch((error) => {
+    console.warn('No offline support:', error);
+  });
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  installPrompt = event;
+  $('install').hidden = false;
+});
+
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  $('install').hidden = true;
+});
+
+$('install').addEventListener('click', async () => {
+  if (installPrompt === null) return;
+  const prompt = installPrompt;
+  installPrompt = null;
+  $('install').hidden = true;
+  await prompt.prompt();
+});
+
 $('retry').addEventListener('click', startCamera);
 renderSetup();
 startCamera();

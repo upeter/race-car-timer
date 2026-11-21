@@ -12,6 +12,11 @@ Open on the phone (Chrome, Android): https://upeter.github.io/race-car-timer/
 A phone needs the HTTPS address. Plain `http://` on the local network gives no
 camera.
 
+**Install it as an app:** open the address in Chrome and press **Install as
+app** on the setup screen, or choose **Add to Home screen** / **Install app**
+in Chrome's menu. The timer then starts from its own icon, full screen without
+the address bar, and works offline once it has been opened online.
+
 ## What you need
 
 - A phone fixed above the track, camera pointing straight down at the finish
@@ -82,5 +87,9 @@ No build step and no dependencies.
 npm test                    # unit tests (Node 20 or later)
 python3 -m http.server 8000 # then open http://localhost:8000/
 ```
+
+The offline cache in `sw.js` fetches the app's own files network-first, so a
+new version reaches an online phone at once. Add any new file under `src/` to
+`APP_FILES` there, or the app will not start offline.
 
 The design is in `docs/superpowers/specs/2026-11-21-lap-timer-design.md`.
