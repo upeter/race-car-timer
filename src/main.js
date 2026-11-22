@@ -1,5 +1,7 @@
 import {
   cameraSupported,
+  closeCamera,
+  createSessionClock,
   openCamera,
   onFrames,
   createZoneReader,
@@ -85,6 +87,7 @@ let frozenTime = null; // time at which a race ended or was stopped
 let countdownShown = null;
 let wakeLock = null;
 let fpsStart = null; // { time, frames }: window for the frame rate
+const clock = createSessionClock();
 
 function save() {
   saveSetup(setup);
@@ -114,11 +117,27 @@ async function startCamera() {
     );
     return;
   }
+  // The page went to the background while the camera was opening.
+  if (document.visibilityState === 'hidden') {
+    closeCamera(video);
+    return;
+  }
   layout();
   keepAwake();
   readZone = createZoneReader(video);
   if (stopFrames) stopFrames();
-  stopFrames = onFrames(video, handleFrame, showFrameError);
+  clock.restart();
+  stopFrames = onFrames(
+    video,
+    (frameTime) => handleFrame(clock.time(frameTime)),
+    showFrameError,
+  );
+}
+
+function stopCamera() {
+  if (stopFrames) stopFrames();
+  stopFrames = null;
+  closeCamera(video);
 }
 
 // Sizes the stage to the video's aspect ratio. On the Setup screen it stays
@@ -156,8 +175,12 @@ async function keepAwake() {
   }
 }
 
+// A phone stops the camera of a page in the background and does not give the
+// old stream back, so the picture froze on return. Close it on hide and open
+// a new one on show. Time in the background does not count.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') keepAwake();
+  if (document.visibilityState === 'hidden') stopCamera();
+  else startCamera();
 });
 
 function updateStatus(time) {

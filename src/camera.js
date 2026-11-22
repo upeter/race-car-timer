@@ -28,6 +28,28 @@ export async function openCamera(video) {
   return stream;
 }
 
+// A reopened camera stream starts its media time again near zero. This
+// clock shifts each new stream so that time never jumps back: the first
+// frame after restart() gets the last time seen before it.
+export function createSessionClock() {
+  let offset = 0;
+  let last = 0;
+  let restarted = false;
+  return {
+    time(frameTime) {
+      if (restarted) {
+        offset = last - frameTime;
+        restarted = false;
+      }
+      last = frameTime + offset;
+      return last;
+    },
+    restart() {
+      restarted = true;
+    },
+  };
+}
+
 const CLOCK_CHECK_CALLBACKS = 5;
 
 // Calls callback(time) once per video frame, time in seconds. Uses the
