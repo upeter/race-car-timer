@@ -1,10 +1,12 @@
 import {
+  applyZoom,
   cameraSupported,
   closeCamera,
   createSessionClock,
   openCamera,
   onFrames,
   createZoneReader,
+  zoomRange,
 } from './camera.js';
 import { averageFrames, calibrateCar, hueAround } from './calibrate.js';
 import { matchLevels, presence } from './detector.js';
@@ -88,6 +90,8 @@ let countdownShown = null;
 let wakeLock = null;
 let fpsStart = null; // { time, frames }: window for the frame rate
 const clock = createSessionClock();
+let stream = null; // the open camera stream
+let zoomQueue = Promise.resolve(); // zoom changes, one after another
 
 function save() {
   saveSetup(setup);
@@ -109,7 +113,7 @@ async function startCamera() {
     return;
   }
   try {
-    await openCamera(video);
+    stream = await openCamera(video);
   } catch (error) {
     showMessage(
       `Could not open the camera: ${error.message} ` +
@@ -122,6 +126,8 @@ async function startCamera() {
     closeCamera(video);
     return;
   }
+  await setupZoom();
+  if (session === null && step === 'zone') setHint(stepHint());
   layout();
   keepAwake();
   readZone = createZoneReader(video);
@@ -138,6 +144,38 @@ function stopCamera() {
   if (stopFrames) stopFrames();
   stopFrames = null;
   closeCamera(video);
+  stream = null;
+}
+
+function formatZoom(value) {
+  return `${Number(value).toFixed(1)}×`;
+}
+
+// Shows the zoom slider when the camera has a zoom, and gives a new stream
+// the stored zoom again.
+async function setupZoom() {
+  const range = zoomRange(stream?.getVideoTracks()[0]);
+  $('zoom-row').hidden = range === null;
+  if (range === null) return;
+  const slider = $('zoom');
+  slider.min = range.min;
+  slider.max = range.max;
+  slider.step = range.step;
+  try {
+    const zoom = await applyZoom(stream, setup.settings.zoom);
+    slider.value = zoom;
+    $('zoom-value').textContent = formatZoom(zoom);
+  } catch {
+    // The camera refused the zoom. It keeps its own.
+    $('zoom-row').hidden = true;
+  }
+}
+
+function queueZoom(value) {
+  zoomQueue = zoomQueue
+    .then(() => applyZoom(stream, value))
+    .catch((error) => setHint(`Could not zoom: ${error.message}`));
+  return zoomQueue;
 }
 
 // Sizes the stage to the video's aspect ratio. On the Setup screen it stays
@@ -302,7 +340,9 @@ function stepHint() {
   if (step === 'zone') {
     return zone
       ? 'Drag a new box to move it. A new box removes the cars.'
-      : 'Drag a box over the finish line, about one car length wide.';
+      : $('zoom-row').hidden
+        ? 'Drag a box over the finish line, about one car length wide.'
+        : 'Zoom in if the line looks small, then drag a box over it, about one car length wide.';
   }
   if (step === 'baseline') {
     return setup.baseline
@@ -672,6 +712,26 @@ $('tolerance').addEventListener('change', () => {
   setup.cars = [];
   save();
   renderSetup(TOLERANCE_CHANGED);
+});
+
+// While dragging, the picture follows the slider.
+$('zoom').addEventListener('input', () => {
+  const zoom = Number($('zoom').value);
+  $('zoom-value').textContent = formatZoom(zoom);
+  queueZoom(zoom);
+});
+
+// The empty track and the cars were captured at the old zoom.
+$('zoom').addEventListener('change', async () => {
+  const zoom = Number($('zoom').value);
+  await queueZoom(zoom);
+  if (zoom === setup.settings.zoom) return;
+  setup.settings.zoom = zoom;
+  if (setup.baseline !== null || setup.cars.length > 0) {
+    handlePictureChange();
+  } else {
+    save();
+  }
 });
 
 $('min-lap').addEventListener('input', () => {

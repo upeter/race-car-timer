@@ -122,11 +122,12 @@
       border: 3px solid #1a1a1d; }
     #settings { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px;
       background: var(--card); }
-    #settings .row { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-    #settings label { flex: none; width: 9.5em; font: 600 15px/1.1 var(--cond);
+    #settings .row, .tune { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+    .tune { padding: 0 12px; background: var(--card); }
+    #settings label, .tune label { flex: none; width: 9.5em; font: 600 15px/1.1 var(--cond);
       letter-spacing: 0.06em; text-transform: uppercase; }
-    #settings input { flex: 1; min-width: 0; accent-color: var(--red); }
-    #settings span { width: 3.5em; text-align: right; font: 800 16px/1 var(--cond); }
+    #settings input, .tune input { flex: 1; min-width: 0; accent-color: var(--red); }
+    #settings span, .tune span { width: 3.5em; text-align: right; font: 800 16px/1 var(--cond); }
 
     /* Practice and Race: the results sit at the bottom, over the part of the
        picture that shows only what the phone stands on. */
@@ -231,6 +232,11 @@
     <p id="hint" aria-live="polite"></p>
 
     <div class="step" data-step="zone">
+      <div id="zoom-row" class="tune" hidden>
+        <label for="zoom">Zoom</label>
+        <input id="zoom" type="range">
+        <span id="zoom-value"></span>
+      </div>
       <button id="zone-next" class="wide">Next</button>
     </div>
 

@@ -28,6 +28,33 @@ export async function openCamera(video) {
   return stream;
 }
 
+// The zoom the camera offers as { min, max, step }, or null when it has no
+// zoom (or only one level).
+export function zoomRange(track) {
+  const zoom = track?.getCapabilities?.().zoom;
+  if (!zoom || !(zoom.max > zoom.min)) return null;
+  return { min: zoom.min, max: zoom.max, step: zoom.step > 0 ? zoom.step : 0.1 };
+}
+
+// `value` inside the range and on its steps; the minimum when null.
+export function clampZoom(value, range) {
+  if (value === null || !Number.isFinite(value)) return range.min;
+  const steps = Math.round((value - range.min) / range.step);
+  const snapped = range.min + steps * range.step;
+  return Math.min(range.max, Math.max(range.min, Number(snapped.toFixed(4))));
+}
+
+// Sets the zoom of the stream's video track. Resolves with the zoom used,
+// or null when the camera has no zoom.
+export async function applyZoom(stream, value) {
+  const track = stream?.getVideoTracks()[0];
+  const range = zoomRange(track);
+  if (range === null) return null;
+  const zoom = clampZoom(value, range);
+  await track.applyConstraints({ advanced: [{ zoom }] });
+  return zoom;
+}
+
 // A reopened camera stream starts its media time again near zero. This
 // clock shifts each new stream so that time never jumps back: the first
 // frame after restart() gets the last time seen before it.

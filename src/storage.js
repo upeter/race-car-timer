@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS = {
   minLapTime: 2,
   mode: 'practice',
   lapTarget: 10,
+  zoom: null, // null: the camera's widest view
 };
 
 const isNumber = (value) => typeof value === 'number' && Number.isFinite(value);

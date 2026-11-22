@@ -14,7 +14,7 @@ const setup = {
     height: 1,
   },
   cars: [{ name: 'Car 1', hue: 329, threshold: 0.03, noiseFloor: 0 }],
-  settings: { tolerance: 15, minLapTime: 2, mode: 'race', lapTarget: 10 },
+  settings: { tolerance: 15, minLapTime: 2, mode: 'race', lapTarget: 10, zoom: 2 },
 };
 
 test('a setup survives a round trip', () => {
