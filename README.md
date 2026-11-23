@@ -62,7 +62,9 @@ Setup is a wizard: one step per screen, with **Next** and **Back**.
    finish or by the fastest lap).
 5. **Grid is set**: check the cars and press **Lights out** to start.
 
-A stored setup opens on the last screen. **Edit setup** goes back to step 1,
+A stored setup opens on step 4, so every session starts by choosing practice
+or race, the laps and the winner. **New race** and **Setup** on the race
+screen come back to it too. **Edit setup** goes back to step 1,
 **Clear** removes the zone, the empty-track picture and all cars.
 
 If a pass is not counted, add light or use a larger sticker first. Changing the

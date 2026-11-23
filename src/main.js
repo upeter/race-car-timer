@@ -33,7 +33,7 @@ import {
   formatTime,
   normalizedPoint,
 } from './ui.js';
-import { clampStep, furthestStep } from './wizard.js';
+import { clampStep, furthestStep, openingStep } from './wizard.js';
 
 const MAX_CARS = 4;
 const BASELINE_FRAMES = 10;
@@ -73,7 +73,7 @@ function defaultSetup() {
 // ---- State ----------------------------------------------------------------
 
 let setup = loadSetup() ?? defaultSetup();
-let step = furthestStep(setup);
+let step = openingStep(setup);
 let readZone = null;
 let stopFrames = null;
 let lastTime = 0;
@@ -808,6 +808,11 @@ $('start').addEventListener('click', () => {
 });
 
 $('start-race').addEventListener('click', () => {
+  if (frozenTime !== null) {
+    // "New race": choose practice or race, laps and winner again first.
+    showSession();
+    return;
+  }
   beeper.unlock();
   newSession();
   startRace(session, lastTime + COUNTDOWN_SECONDS);
@@ -840,10 +845,12 @@ function showSetupScreen() {
   layout();
 }
 
-$('back').addEventListener('click', () => {
+function showSession() {
   showSetupScreen();
-  goTo('ready');
-});
+  goTo('mode');
+}
+
+$('back').addEventListener('click', showSession);
 
 // Shows 3, 2, 1 before "Go" and "Go" for one second after it.
 function updateCountdown(time) {

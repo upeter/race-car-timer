@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { furthestStep, clampStep } from '../src/wizard.js';
+import { furthestStep, clampStep, openingStep } from '../src/wizard.js';
 
 const zone = { x: 0.4, y: 0.1, w: 0.2, h: 0.6 };
 const baseline = { data: new Uint8ClampedArray(4), width: 1, height: 1 };
@@ -24,4 +24,10 @@ test('clampStep goes back when the setup lost a step', () => {
   assert.equal(clampStep('ready', { zone, baseline, cars: [] }), 'cars');
   assert.equal(clampStep('mode', { zone, baseline: null, cars: [] }), 'baseline');
   assert.equal(clampStep('cars', { zone: null, baseline: null, cars: [] }), 'zone');
+});
+
+test('openingStep shows the session step when the setup is complete', () => {
+  assert.equal(openingStep({ zone, baseline, cars: [car] }), 'mode');
+  assert.equal(openingStep({ zone, baseline, cars: [] }), 'cars');
+  assert.equal(openingStep({ zone: null, baseline: null, cars: [] }), 'zone');
 });

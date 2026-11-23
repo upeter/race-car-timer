@@ -43,8 +43,10 @@ A wizard: one step per screen, under a header with the step number and
 title, and over the live rear-camera video. Each screen has one main button,
 plus Back. A step is reachable only when the steps before it are done; if a
 step is undone (for example the cars are removed), the wizard goes back to it.
-A stored setup opens on the last screen, "Grid is set", which lists the cars
-and has the Start button ("Lights out"), Edit setup, Settings and Clear.
+A stored setup opens on the Session step, so every session starts by choosing
+practice or race, laps and winner; Next leads to "Grid is set", which lists
+the cars and has the Start button ("Lights out"), Edit setup, Settings and
+Clear. "New race" and "Setup" on the run screen also go to the Session step.
 
 1. **Zone.** The user drags a rectangle over the finish strip. It must be
    roughly one car length wide in the direction of travel, because a fast car
@@ -108,7 +110,8 @@ Assumption: the rules below are a proposal. The user has not confirmed them.
   the leader's laps, the race time, and a podium for the first three. The
   winner shows their best lap, the others their gap to the winner: "+0.78" on
   the same lap, "+2 laps" when lapped. A fourth car is listed below the
-  podium. Buttons: "New race" (same setup) and Setup.
+  podium. Buttons: "New race" (back to the Session step, same cars and
+  camera) and Setup.
 
 ## Calibration
 

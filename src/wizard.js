@@ -15,3 +15,10 @@ export function clampStep(step, setup) {
   const limit = furthestStep(setup);
   return STEPS.indexOf(step) > STEPS.indexOf(limit) ? limit : step;
 }
+
+// Where the app opens: a complete setup opens on the session step, so each
+// session starts by choosing practice or race, laps and winner.
+export function openingStep(setup) {
+  const furthest = furthestStep(setup);
+  return furthest === 'ready' ? 'mode' : furthest;
+}
