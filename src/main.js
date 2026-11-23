@@ -386,7 +386,7 @@ function sessionLabel({ mode, lapTarget, winBy }) {
 
 function winText({ winBy, lapTarget }) {
   return winBy === 'fastestLap'
-    ? `Every car drives ${lapCount(lapTarget)}. The shortest single lap wins.`
+    ? `Every car drives ${lapCount(lapTarget)}. Lap 1 from the grid does not count; the shortest lap after it wins.`
     : `The first car to complete ${lapCount(lapTarget)} wins.`;
 }
 
@@ -698,13 +698,14 @@ for (const button of document.querySelectorAll('[data-mode]')) {
 for (const button of document.querySelectorAll('[data-win-by]')) {
   button.addEventListener('click', () => {
     setup.settings.winBy = button.dataset.winBy;
-    save();
-    renderSetup();
+    setLapTarget(setup.settings.lapTarget);
   });
 }
 
 function setLapTarget(value) {
-  setup.settings.lapTarget = Math.min(999, Math.max(1, Math.round(value) || 10));
+  // Lap 1 does not count in a fastest-lap race, so it needs a second lap.
+  const minimum = setup.settings.winBy === 'fastestLap' ? 2 : 1;
+  setup.settings.lapTarget = Math.min(999, Math.max(minimum, Math.round(value) || 10));
   save();
   renderSetup();
 }
@@ -914,7 +915,7 @@ function byFastestLap() {
 function runTag(now) {
   if (session.mode !== 'race') return 'Practice';
   const { goTime, lapTarget } = session;
-  if (goTime === null || now < goTime) return `Grid · ${lapTarget} laps`;
+  if (goTime === null || now < goTime) return `Grid · ${lapCount(lapTarget)}`;
   return `Lap ${Math.min(leaderLaps() + 1, lapTarget)}/${lapTarget}`;
 }
 
