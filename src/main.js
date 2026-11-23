@@ -699,6 +699,10 @@ for (const button of document.querySelectorAll('[data-win-by]')) {
   button.addEventListener('click', () => {
     setup.settings.winBy = button.dataset.winBy;
     setLapTarget(setup.settings.lapTarget);
+    // On a phone the Next button sits below the fold after the Race card.
+    // Scrolling to the Back link under it shows Next with room to spare.
+    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    $('mode-back').scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'nearest' });
   });
 }
 
