@@ -100,7 +100,8 @@ Assumption: the rules below are a proposal. The user has not confirmed them.
   "3/10". Above the cards: "Grid · 10 laps" before "Go", then "Lap 4/10"
   (the leader's current lap), and the race clock.
 - A "Winner" switch in the Race card picks "First to finish" (the rules
-  above) or "Fastest lap": the shortest single lap wins, and cards, gaps and
+  above) or "Fastest lap": the shortest single lap wins (lap 1 from the grid
+  does not count), and cards, gaps and
   podium follow best laps. See `2026-11-23-fastest-lap-race-design.md`.
 - The race ends when all cars have finished or the user presses "Stop". The
   cards give way to the result: a chequered "Finish" (or "Stopped") box with

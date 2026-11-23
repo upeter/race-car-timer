@@ -58,7 +58,8 @@ Setup is a wizard: one step per screen, with **Next** and **Back**.
    which a crossing counts. If the camera does not find the sticker, the
    button **Camera missed it? Tap the sticker** appears: press it and tap the
    sticker in the picture.
-4. **Choose the session**: **Practice** or **Race** (with a number of laps).
+4. **Choose the session**: **Practice** or **Race** (with a number of laps, won by the first car to
+   finish or by the fastest lap).
 5. **Grid is set**: check the cars and press **Lights out** to start.
 
 A stored setup opens on the last screen. **Edit setup** goes back to step 1,
@@ -73,7 +74,10 @@ colour tolerance in Settings removes the cars, so they must be added again.
   crossing is a lap.
 - **Race**: cars start behind the line. Press **Start race** for the
   countdown; after it, each crossing is a lap. A car finishes at the lap
-  target. **Stop** ends the race early, **New race** starts another.
+  target. **Stop** ends the race early, **New race** starts another. The
+  **Winner** switch picks the first car to finish or the fastest lap: "Fastest
+  lap" ranks cars by their shortest lap, and lap 1 from the grid does not
+  count.
 
 The results show at the bottom of the screen, one card per car with the
 sticker colour the camera saw. After a race, a podium shows the first three

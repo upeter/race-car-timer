@@ -30,8 +30,12 @@ Mockup: [Fastest-lap race mockup](https://claude.ai/artifact/6Jm6iN8BWein7pM9dMJ
   button is white with dark text; both buttons have `aria-pressed`.
 - One line of help text under the switch:
   - First to finish: "The first car to complete 10 laps wins."
-  - Fastest lap: "Every car drives 10 laps. The shortest single lap wins."
+  - Fastest lap: "Every car drives 10 laps. Lap 1 from the grid does not
+    count; the shortest lap after it wins."
   The number is the current lap target.
+- A fastest-lap race needs at least 2 laps: the lap target has a minimum of 2
+  while "Fastest lap" is selected, and choosing it with a target of 1 raises
+  the target to 2. First to finish keeps a minimum of 1.
 - The switch is disabled when Practice is selected, like the lap stepper.
 - Choosing a button saves the setting, like the other settings.
 - The Ready screen label (`sessionLabel`) becomes
@@ -48,23 +52,33 @@ cars finished, or Stop) are the same for both settings.
 
 For `winBy: 'fastestLap'`:
 
-1. Cars with at least one lap rank by best lap, shortest first.
+Lap 1 (from "Go" to the first crossing) does not count. Cars stand just
+before the line on the grid, so lap 1 is a fraction of a second and would
+decide every race. A car's best lap is its shortest lap after lap 1.
+
+1. Cars with a best lap rank by it, shortest first.
 2. Equal best laps: the car that completed that lap earlier in race time
    ranks higher.
-3. Cars with no lap rank last, in car order.
+3. Cars with no best lap rank last, in car order. This includes a car that
+   has only lap 1.
 
 Finish order and lap count do not matter. `winBy: 'finish'` keeps today's
 ranking unchanged.
 
 To support rule 2, each car records the race time at which its best lap was
-completed (`bestLapTime`), updated in `onFrame` when a new lap is strictly
-shorter than the current best.
+completed (`bestLapTime`), updated in `onFrame` when a new lap after lap 1 is
+strictly shorter than the current best.
+
+`carStats(...).bestLap` returns this counted best lap in a fastest-lap race,
+so the card and podium show the deciding number. The purple "fastest" mark
+(`fastestLap`) uses the same laps and, on an exact tie, picks the lap set
+earlier, so it is always on the leader.
 
 ## Gaps (`gaps` in `src/race.js`)
 
 For `winBy: 'fastestLap'`, the gap of each car is its best lap minus the
 leader's best lap: `{ seconds }`. The leader gets `null`. A car with no lap
-gets `null` (shown as "–"). `formatGap` needs no change. The
+has no best lap (none, or only lap 1) gets `null` (shown as "–"). `formatGap` needs no change. The
 `'finish'` gaps do not change.
 
 ## Live screen
