@@ -113,6 +113,14 @@
     .stepper input { width: 56px; border: 0; background: transparent; color: #fff;
       text-align: center; font: 900 italic 24px/1 var(--cond); -moz-appearance: textfield; }
     .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .winner { display: flex; flex-direction: column; gap: 8px; padding: 0 14px 14px; }
+    .winner-label { font: 600 14px/1 var(--cond); letter-spacing: 0.14em; text-transform: uppercase; }
+    .seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); }
+    .seg button { clip-path: none; min-height: 44px; padding: 0 8px; background: #1e1e22;
+      color: var(--muted); font: 800 15px/1 var(--cond); letter-spacing: 0.08em; }
+    .seg button[aria-pressed="true"] { background: var(--white); color: var(--bg); }
+    .seg button:disabled { background: #1a1a1d; color: #44444a; }
+    .win-text { margin: 0; font: 400 13px/1.4 var(--body); color: var(--text); }
 
     /* Ready. */
     #summary { margin: 0; font: 600 13px/1.3 var(--cond); letter-spacing: 0.12em;
@@ -136,6 +144,7 @@
       padding: 12px 14px 18px; background: rgb(10 10 11 / 0.92);
       display: flex; flex-direction: column; gap: 10px; }
     .run-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .run-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .clock { font: 800 24px/1 var(--cond); font-variant-numeric: tabular-nums; }
     .label { font: 600 12px/1 var(--cond); letter-spacing: 0.12em; color: var(--muted);
       text-transform: uppercase; }
@@ -154,6 +163,7 @@
     .stat { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
     .stat:last-child { align-items: flex-end; }
     .stat b { font: 700 16px/1 var(--cond); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .stat.key b { font-size: 20px; }
     .fastest { color: #c77dff; }
     .run-buttons { display: flex; gap: 8px; }
     .run-buttons button:not(.quiet) { flex: 1; }
@@ -278,6 +288,14 @@
           </div>
           <label for="lap-target">Laps</label>
         </div>
+        <div class="winner">
+          <span class="winner-label">Winner</span>
+          <div class="seg" role="group" aria-label="Winner">
+            <button id="win-finish" data-win-by="finish" aria-pressed="false">First to finish</button>
+            <button id="win-fastest" data-win-by="fastestLap" aria-pressed="false">Fastest lap</button>
+          </div>
+          <p id="win-text" class="win-text"></p>
+        </div>
       </div>
       <button id="mode-next" class="wide">Next</button>
       <div class="links"><button id="mode-back" class="link">‹ Back</button></div>
@@ -314,7 +332,10 @@
   <div class="chk run-chk" hidden></div>
   <section id="run" hidden>
     <div id="live-view">
-      <div class="run-bar"><span id="run-tag" class="tag"></span><span id="run-clock" class="clock"></span></div>
+      <div class="run-bar">
+        <span class="run-left"><span id="run-tag" class="tag"></span><span id="run-rule" class="label" hidden>Fastest lap wins</span></span>
+        <span id="run-clock" class="clock"></span>
+      </div>
     </div>
     <div id="cards" class="cards"></div>
     <div id="result" hidden>

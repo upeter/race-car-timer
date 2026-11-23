@@ -374,8 +374,20 @@ function stepHeader() {
   return ['Ready', sessionLabel(settings), 'Grid is set'];
 }
 
-function sessionLabel({ mode, lapTarget }) {
-  return mode === 'race' ? `Race · ${lapTarget} laps` : 'Practice';
+function lapCount(lapTarget) {
+  return lapTarget === 1 ? '1 lap' : `${lapTarget} laps`;
+}
+
+function sessionLabel({ mode, lapTarget, winBy }) {
+  if (mode !== 'race') return 'Practice';
+  const rule = winBy === 'fastestLap' ? ' · Fastest lap' : '';
+  return `Race · ${lapCount(lapTarget)}${rule}`;
+}
+
+function winText({ winBy, lapTarget }) {
+  return winBy === 'fastestLap'
+    ? `Every car drives ${lapCount(lapTarget)}. The shortest single lap wins.`
+    : `The first car to complete ${lapCount(lapTarget)} wins.`;
 }
 
 function goTo(newStep) {
@@ -408,7 +420,9 @@ function updateButtons() {
   $('cars-done').disabled = cars.length === 0;
   $('start').disabled = !ready;
   const race = setup.settings.mode === 'race';
-  for (const id of ['lap-target', 'laps-down', 'laps-up']) $(id).disabled = !race;
+  for (const id of ['lap-target', 'laps-down', 'laps-up', 'win-finish', 'win-fastest']) {
+    $(id).disabled = !race;
+  }
 }
 
 // `hint` replaces the usual step hint, for messages that must stay.
@@ -441,6 +455,10 @@ function renderSetup(hint) {
     $(`mode-${mode}`).querySelector('button').setAttribute('aria-pressed', String(on));
   }
   $('lap-target').value = settings.lapTarget;
+  for (const button of document.querySelectorAll('[data-win-by]')) {
+    button.setAttribute('aria-pressed', String(settings.winBy === button.dataset.winBy));
+  }
+  $('win-text').textContent = winText(settings);
 
   $('tolerance').value = settings.tolerance;
   $('tolerance-value').textContent = `±${settings.tolerance}°`;
@@ -677,6 +695,14 @@ for (const button of document.querySelectorAll('[data-mode]')) {
   });
 }
 
+for (const button of document.querySelectorAll('[data-win-by]')) {
+  button.addEventListener('click', () => {
+    setup.settings.winBy = button.dataset.winBy;
+    save();
+    renderSetup();
+  });
+}
+
 function setLapTarget(value) {
   setup.settings.lapTarget = Math.min(999, Math.max(1, Math.round(value) || 10));
   save();
@@ -750,12 +776,13 @@ $('clear-setup').addEventListener('click', () => {
 // ---- Practice and Race ----------------------------------------------------
 
 function newSession() {
-  const { mode, lapTarget, minLapTime } = setup.settings;
+  const { mode, lapTarget, minLapTime, winBy } = setup.settings;
   session = createSession({
     mode,
     carCount: setup.cars.length,
     lapTarget,
     minLapTime,
+    winBy,
   });
   frozenTime = null;
   countdownShown = null;
@@ -880,6 +907,10 @@ function leaderLaps() {
   return Math.max(...session.cars.map((car) => car.laps.length));
 }
 
+function byFastestLap() {
+  return session.mode === 'race' && session.winBy === 'fastestLap';
+}
+
 function runTag(now) {
   if (session.mode !== 'race') return 'Practice';
   const { goTime, lapTarget } = session;
@@ -887,7 +918,7 @@ function runTag(now) {
   return `Lap ${Math.min(leaderLaps() + 1, lapTarget)}/${lapTarget}`;
 }
 
-function carCard(carIndex, position, now, fastest) {
+function carCard(carIndex, position, now, fastest, gap) {
   const car = setup.cars[carIndex];
   const stats = carStats(session, carIndex, now);
   const race = session.mode === 'race';
@@ -902,11 +933,14 @@ function carCard(carIndex, position, now, fastest) {
 
   const isFastest = fastest !== null && fastest.car === carIndex;
   const statRow = element('div', 'card-stats');
-  statRow.append(
-    stat('Best', formatTime(stats.bestLap), isFastest ? 'fastest' : ''),
-    stat('Laps', race ? `${stats.laps}/${session.lapTarget}` : String(stats.laps)),
-    stat('Total', formatTime(stats.total)),
-  );
+  const bestStat = stat('Best', formatTime(stats.bestLap), isFastest ? 'fastest' : '');
+  const lapsStat = stat('Laps', race ? `${stats.laps}/${session.lapTarget}` : String(stats.laps));
+  if (byFastestLap()) {
+    bestStat.classList.add('key');
+    statRow.append(bestStat, lapsStat, stat('Gap', formatGap(gap) || '–'));
+  } else {
+    statRow.append(bestStat, lapsStat, stat('Total', formatTime(stats.total)));
+  }
 
   card.append(
     stripe,
@@ -919,10 +953,12 @@ function carCard(carIndex, position, now, fastest) {
 
 function renderLive(now) {
   const fastest = fastestLap(session);
+  const carGaps = gaps(session);
   $('run-tag').textContent = runTag(now);
+  $('run-rule').hidden = !byFastestLap();
   $('run-clock').textContent = formatTime(sessionClock(now));
   const cards = standings(session).map((carIndex, position) =>
-    carCard(carIndex, position, now, fastest),
+    carCard(carIndex, position, now, fastest, carGaps[position]),
   );
   $('cards').classList.toggle('single', cards.length === 1);
   $('cards').replaceChildren(...cards);
@@ -960,7 +996,8 @@ function renderResult() {
   const fastest = fastestLap(session);
   const finished = isRaceOver(session);
 
-  $('finish-label').textContent = finished ? 'Finish' : 'Stopped';
+  const label = finished ? 'Finish' : 'Stopped';
+  $('finish-label').textContent = byFastestLap() ? `${label} · Fastest lap` : label;
   $('finish-laps').textContent = `${leaderLaps()}/${session.lapTarget}`;
   $('result-time').textContent = formatTime(sessionClock(frozenTime));
 
