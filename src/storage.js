@@ -5,6 +5,7 @@ export const DEFAULT_SETTINGS = {
   minLapTime: 2,
   mode: 'practice',
   lapTarget: 10,
+  winBy: 'finish',
   zoom: null, // null: the camera's widest view
 };
 

@@ -14,7 +14,7 @@ const setup = {
     height: 1,
   },
   cars: [{ name: 'Car 1', hue: 329, threshold: 0.03, noiseFloor: 0 }],
-  settings: { tolerance: 15, minLapTime: 2, mode: 'race', lapTarget: 10, zoom: 2 },
+  settings: { tolerance: 15, minLapTime: 2, mode: 'race', lapTarget: 10, zoom: 2, winBy: 'finish' },
 };
 
 test('a setup survives a round trip', () => {
@@ -71,4 +71,18 @@ test('a baseline without a numeric size is dropped, and so are the cars', () => 
   const result = deserializeSetup(text);
   assert.equal(result.baseline, null);
   assert.deepEqual(result.cars, []);
+});
+
+test('a setup saved before the winner setting races to the finish', () => {
+  const text = JSON.stringify({
+    zone: null,
+    cars: [],
+    settings: { tolerance: 15, minLapTime: 2, mode: 'race', lapTarget: 10, zoom: null },
+  });
+  assert.equal(deserializeSetup(text).settings.winBy, 'finish');
+});
+
+test('a saved fastest-lap setting is kept', () => {
+  const saved = { ...setup, settings: { ...setup.settings, winBy: 'fastestLap' } };
+  assert.equal(deserializeSetup(serializeSetup(saved)).settings.winBy, 'fastestLap');
 });
