@@ -170,8 +170,9 @@ test('fastest lap: standings rank by best lap, not finish or laps', () => {
 
 test('fastest lap: an equal best lap set earlier ranks higher', () => {
   const session = race(2, 10, 'fastestLap');
-  cross(session, 1, 13); // lap 3 at 13
-  cross(session, 0, 14); // lap 4
+  cross(session, 1, 13); // lap 1
+  cross(session, 0, 14); // lap 1
+  cross(session, 1, 16); // lap 3 at 16
   cross(session, 0, 17); // lap 3 at 17
   assert.deepEqual(standings(session), [1, 0]);
 });
@@ -179,6 +180,7 @@ test('fastest lap: an equal best lap set earlier ranks higher', () => {
 test('fastest lap: cars without a lap come last, in car order', () => {
   const session = race(3, 10, 'fastestLap');
   cross(session, 2, 14);
+  cross(session, 2, 17);
   assert.deepEqual(standings(session), [2, 0, 1]);
 });
 
@@ -186,13 +188,15 @@ test('fastest lap: an equal later lap keeps the earlier best lap time', () => {
   const session = race(1, 10, 'fastestLap');
   cross(session, 0, 13);
   cross(session, 0, 16);
-  assert.equal(session.cars[0].bestLapTime, 13);
+  cross(session, 0, 19);
+  assert.equal(session.cars[0].bestLapTime, 16);
 });
 
 test('fastest lap: gaps are best-lap differences', () => {
   const session = race(3, 10, 'fastestLap');
-  cross(session, 0, 13); // car 0 best 3
-  cross(session, 1, 14.5); // lap 4.5
+  cross(session, 0, 13); // lap 1
+  cross(session, 0, 16); // car 0 best 3
+  cross(session, 1, 14.5); // lap 1
   cross(session, 1, 18); // car 1 best 3.5
   const result = gaps(session);
   assert.equal(result[0], null);
@@ -205,4 +209,63 @@ test('fastest lap: practice keeps the car order', () => {
   cross(session, 1, 5);
   cross(session, 1, 8);
   assert.deepEqual(standings(session), [0, 1]);
+});
+
+test('fastest lap: a short lap 1 does not count for the ranking', () => {
+  const session = race(2, 10, 'fastestLap');
+  cross(session, 0, 10.5); // lap 1 of 0.5
+  cross(session, 0, 20.5); // lap 2 of 10
+  cross(session, 1, 13); // lap 1 of 3
+  cross(session, 1, 17); // lap 2 of 4
+  assert.deepEqual(standings(session), [1, 0]);
+  near(gaps(session)[1].seconds, 6);
+});
+
+test('fastest lap: a car with only lap 1 has no best lap and no gap', () => {
+  const session = race(3, 10, 'fastestLap');
+  cross(session, 0, 11); // lap 1 only
+  cross(session, 2, 13);
+  cross(session, 2, 17);
+  assert.deepEqual(standings(session), [2, 0, 1]);
+  assert.deepEqual(gaps(session), [null, null, null]);
+  assert.equal(session.cars[0].bestLapTime, null);
+});
+
+test('carStats bestLap ignores lap 1 only in a fastest-lap race', () => {
+  const byLap = race(1, 10, 'fastestLap');
+  cross(byLap, 0, 10.5);
+  assert.equal(carStats(byLap, 0, 12).bestLap, null);
+  cross(byLap, 0, 15.5);
+  near(carStats(byLap, 0, 16).bestLap, 5);
+  const byFinish = race(1, 10, 'finish');
+  cross(byFinish, 0, 10.5);
+  cross(byFinish, 0, 15.5);
+  near(carStats(byFinish, 0, 16).bestLap, 0.5);
+});
+
+test('fastestLap ignores lap 1 in a fastest-lap race', () => {
+  const session = race(2, 10, 'fastestLap');
+  cross(session, 0, 10.5); // lap 1 of 0.5
+  cross(session, 0, 15.5); // lap 2 of 5
+  cross(session, 1, 13);
+  cross(session, 1, 17); // lap 2 of 4
+  const best = fastestLap(session);
+  assert.equal(best.car, 1);
+  near(best.time, 4);
+});
+
+test('fastestLap picks the car that set an equal counted lap earlier', () => {
+  const session = race(2, 10, 'fastestLap');
+  cross(session, 0, 11);
+  cross(session, 1, 12);
+  cross(session, 1, 16); // lap 2 of 4 at 16 (set earlier)
+  cross(session, 0, 17); // lap 2 of 6 at 17
+  cross(session, 0, 21); // lap 3 of 4 at 21
+  assert.equal(fastestLap(session).car, 1);
+  assert.equal(standings(session)[0], 1);
+});
+
+test('gaps of a race without cars is empty', () => {
+  assert.deepEqual(gaps(race(0, 10, 'finish')), []);
+  assert.deepEqual(gaps(race(0, 10, 'fastestLap')), []);
 });

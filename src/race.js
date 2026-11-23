@@ -54,7 +54,9 @@ export function onFrame(session, presence, time) {
     if (racing) {
       const lap = time - (car.lastCrossing ?? session.goTime);
       // Strictly shorter, so an equal later lap keeps the earlier time.
-      if (car.laps.length === 0 || lap < Math.min(...car.laps)) {
+      const counted = countedLaps(session, car);
+      const lapCounts = !byFastestLap(session) || car.laps.length > 0;
+      if (lapCounts && (counted.length === 0 || lap < Math.min(...counted))) {
         car.bestLapTime = time;
       }
       car.laps.push(lap);
@@ -88,25 +90,32 @@ export function carStats(session, index, now) {
   return {
     laps: car.laps.length,
     lastLap: car.laps.length > 0 ? car.laps[car.laps.length - 1] : null,
-    bestLap: bestLap(car),
+    bestLap: bestLap(session, car),
     total,
     finished: car.finishTime !== null,
   };
-}
-
-function bestLap(car) {
-  return car.laps.length > 0 ? Math.min(...car.laps) : null;
 }
 
 function byFastestLap(session) {
   return session.mode === 'race' && session.winBy === 'fastestLap';
 }
 
+// Lap 1 starts from the grid just before the line, so a fastest-lap race
+// does not count it.
+function countedLaps(session, car) {
+  return byFastestLap(session) ? car.laps.slice(1) : car.laps;
+}
+
+function bestLap(session, car) {
+  const laps = countedLaps(session, car);
+  return laps.length > 0 ? Math.min(...laps) : null;
+}
+
 function compareBestLaps(session, a, b) {
   const carA = session.cars[a];
   const carB = session.cars[b];
-  const bestA = bestLap(carA);
-  const bestB = bestLap(carB);
+  const bestA = bestLap(session, carA);
+  const bestB = bestLap(session, carB);
   if (bestA === null && bestB === null) return a - b;
   if (bestA === null) return 1;
   if (bestB === null) return -1;
@@ -146,11 +155,12 @@ export function standings(session) {
 // best laps.
 export function gaps(session) {
   const order = standings(session);
+  if (order.length === 0) return [];
   const leader = session.cars[order[0]];
   if (byFastestLap(session)) {
-    const leaderBest = bestLap(leader);
+    const leaderBest = bestLap(session, leader);
     return order.map((index, position) => {
-      const best = bestLap(session.cars[index]);
+      const best = bestLap(session, session.cars[index]);
       if (position === 0 || best === null || leaderBest === null) return null;
       return { seconds: best - leaderBest };
     });
@@ -168,12 +178,19 @@ export function gaps(session) {
 }
 
 // The fastest lap of the session: { car, time }, or null before any lap.
+// On an equal time a fastest-lap race picks the lap set earlier, matching
+// the standings.
 export function fastestLap(session) {
   let best = null;
   session.cars.forEach((car, index) => {
-    for (const time of car.laps) {
-      if (best === null || time < best.time) best = { car: index, time };
-    }
+    const time = bestLap(session, car);
+    if (time === null) return;
+    const earlier =
+      best !== null &&
+      time === best.time &&
+      byFastestLap(session) &&
+      car.bestLapTime < session.cars[best.car].bestLapTime;
+    if (best === null || time < best.time || earlier) best = { car: index, time };
   });
   return best;
 }
