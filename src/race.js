@@ -5,17 +5,20 @@ export function createSession({
   carCount,
   lapTarget = 10,
   minLapTime = 2,
+  winBy = 'finish',
 }) {
   return {
     mode,
     lapTarget,
     minLapTime,
+    winBy,
     goTime: null,
     cars: Array.from({ length: carCount }, () => ({
       tracker: createTracker(),
       startTime: null,
       lastCrossing: null,
       laps: [],
+      bestLapTime: null,
       finishTime: null,
     })),
   };
@@ -49,7 +52,12 @@ export function onFrame(session, presence, time) {
     if (!crossed || car.finishTime !== null) return;
 
     if (racing) {
-      car.laps.push(time - (car.lastCrossing ?? session.goTime));
+      const lap = time - (car.lastCrossing ?? session.goTime);
+      // Strictly shorter, so an equal later lap keeps the earlier time.
+      if (car.laps.length === 0 || lap < Math.min(...car.laps)) {
+        car.bestLapTime = time;
+      }
+      car.laps.push(lap);
       car.lastCrossing = time;
       if (car.laps.length >= session.lapTarget) {
         car.finishTime = time;
@@ -80,16 +88,40 @@ export function carStats(session, index, now) {
   return {
     laps: car.laps.length,
     lastLap: car.laps.length > 0 ? car.laps[car.laps.length - 1] : null,
-    bestLap: car.laps.length > 0 ? Math.min(...car.laps) : null,
+    bestLap: bestLap(car),
     total,
     finished: car.finishTime !== null,
   };
 }
 
-// Car indices, best position first. Practice keeps the car order.
+function bestLap(car) {
+  return car.laps.length > 0 ? Math.min(...car.laps) : null;
+}
+
+function byFastestLap(session) {
+  return session.mode === 'race' && session.winBy === 'fastestLap';
+}
+
+function compareBestLaps(session, a, b) {
+  const carA = session.cars[a];
+  const carB = session.cars[b];
+  const bestA = bestLap(carA);
+  const bestB = bestLap(carB);
+  if (bestA === null && bestB === null) return a - b;
+  if (bestA === null) return 1;
+  if (bestB === null) return -1;
+  if (bestA !== bestB) return bestA - bestB;
+  return carA.bestLapTime - carB.bestLapTime || a - b;
+}
+
+// Car indices, best position first. Practice keeps the car order. A
+// fastest-lap race ranks by best lap.
 export function standings(session) {
   const order = session.cars.map((_, index) => index);
   if (session.mode !== 'race') return order;
+  if (byFastestLap(session)) {
+    return order.sort((a, b) => compareBestLaps(session, a, b));
+  }
   return order.sort((a, b) => {
     const carA = session.cars[a];
     const carB = session.cars[b];
@@ -110,10 +142,19 @@ export function standings(session) {
 
 // How far each car is behind the leader, in standings order: the leader
 // gets null, a car on fewer laps { laps }, a car on the same lap { seconds }
-// between their last crossings.
+// between their last crossings. In a fastest-lap race: { seconds } between
+// best laps.
 export function gaps(session) {
   const order = standings(session);
   const leader = session.cars[order[0]];
+  if (byFastestLap(session)) {
+    const leaderBest = bestLap(leader);
+    return order.map((index, position) => {
+      const best = bestLap(session.cars[index]);
+      if (position === 0 || best === null || leaderBest === null) return null;
+      return { seconds: best - leaderBest };
+    });
+  }
   return order.map((index, position) => {
     if (position === 0) return null;
     const car = session.cars[index];

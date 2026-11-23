@@ -25,8 +25,8 @@ function cross(session, car, time) {
   return events;
 }
 
-function race(carCount, lapTarget) {
-  const session = createSession({ mode: 'race', carCount, lapTarget });
+function race(carCount, lapTarget, winBy) {
+  const session = createSession({ mode: 'race', carCount, lapTarget, winBy });
   startRace(session, 10);
   return session;
 }
@@ -156,4 +156,53 @@ test('fastestLap finds the quickest lap of any car', () => {
   const best = fastestLap(session);
   assert.equal(best.car, 1);
   near(best.time, 4);
+});
+
+test('fastest lap: standings rank by best lap, not finish or laps', () => {
+  const session = race(3, 2, 'fastestLap');
+  cross(session, 0, 13); // lap 3
+  cross(session, 2, 14); // lap 4
+  cross(session, 1, 15); // lap 5
+  cross(session, 0, 16); // lap 3, car 0 finishes first
+  cross(session, 1, 17.5); // lap 2.5, car 1 finishes second
+  assert.deepEqual(standings(session), [1, 0, 2]);
+});
+
+test('fastest lap: an equal best lap set earlier ranks higher', () => {
+  const session = race(2, 10, 'fastestLap');
+  cross(session, 1, 13); // lap 3 at 13
+  cross(session, 0, 14); // lap 4
+  cross(session, 0, 17); // lap 3 at 17
+  assert.deepEqual(standings(session), [1, 0]);
+});
+
+test('fastest lap: cars without a lap come last, in car order', () => {
+  const session = race(3, 10, 'fastestLap');
+  cross(session, 2, 14);
+  assert.deepEqual(standings(session), [2, 0, 1]);
+});
+
+test('fastest lap: an equal later lap keeps the earlier best lap time', () => {
+  const session = race(1, 10, 'fastestLap');
+  cross(session, 0, 13);
+  cross(session, 0, 16);
+  assert.equal(session.cars[0].bestLapTime, 13);
+});
+
+test('fastest lap: gaps are best-lap differences', () => {
+  const session = race(3, 10, 'fastestLap');
+  cross(session, 0, 13); // car 0 best 3
+  cross(session, 1, 14.5); // lap 4.5
+  cross(session, 1, 18); // car 1 best 3.5
+  const result = gaps(session);
+  assert.equal(result[0], null);
+  near(result[1].seconds, 0.5);
+  assert.equal(result[2], null);
+});
+
+test('fastest lap: practice keeps the car order', () => {
+  const session = createSession({ mode: 'practice', carCount: 2, winBy: 'fastestLap' });
+  cross(session, 1, 5);
+  cross(session, 1, 8);
+  assert.deepEqual(standings(session), [0, 1]);
 });
