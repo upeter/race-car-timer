@@ -59,7 +59,10 @@ self.addEventListener('fetch', (event) => {
 async function networkFirst(request) {
   const cache = await caches.open(CACHE);
   try {
-    const response = await fetch(request);
+    // Past the browser's HTTP cache: GitHub Pages lets it keep files for 10
+    // minutes, which after a deploy mixed a new index.html with an old
+    // main.js. 'no-cache' revalidates, so an unchanged file is a cheap 304.
+    const response = await fetch(request, { cache: 'no-cache' });
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch (error) {
